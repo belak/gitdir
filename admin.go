@@ -77,20 +77,22 @@ type orgConfig struct {
 	Repos map[string]repoConfig
 }
 
+type adminOptions struct {
+	UserRepos bool `yaml:"user_repos"`
+	UserKeys  bool `yaml:"user_keys"`
+
+	OrgConfig            bool `yaml:"org_config"`
+	OrgConfigPermissions bool `yaml:"org_config_permissions"`
+	OrgConfigRepos       bool `yaml:"org_config_repos"`
+	OrgConfigUsers       bool `yaml:"org_config_users"`
+}
+
 type adminConfig struct {
 	Groups map[string][]string
 	Repos  map[string]repoConfig
 	Orgs   map[string]orgConfig
 
-	Options struct {
-		UserRepos bool
-		UserKeys  bool
-
-		OrgConfig            bool
-		OrgConfigPermissions bool
-		OrgConfigRepos       bool
-		OrgConfigUsers       bool
-	}
+	Options adminOptions
 }
 
 func newAdminGitSignature() *git.Signature {
@@ -200,20 +202,36 @@ func (a *AdminRepo) loadSettings() (*adminConfig, error) {
 		c.Groups[name] = expanded
 	}
 
-	for _, repo := range c.Repos {
-		repo.Write = expandGroups(c.Groups, repo.Write)
-		repo.Read = expandGroups(c.Groups, repo.Read)
+	if c.Repos == nil {
+		c.Repos = make(map[string]repoConfig)
+	}
+	for repoKey, oldRepo := range c.Repos {
+		newRepo := oldRepo
+		newRepo.Write = expandGroups(c.Groups, newRepo.Write)
+		newRepo.Read = expandGroups(c.Groups, newRepo.Read)
+		c.Repos[repoKey] = newRepo
 	}
 
-	for _, org := range c.Orgs {
-		org.Admin = expandGroups(c.Groups, org.Admin)
-		org.Write = expandGroups(c.Groups, org.Write)
-		org.Read = expandGroups(c.Groups, org.Read)
+	if c.Orgs == nil {
+		c.Orgs = make(map[string]orgConfig)
+	}
+	for orgKey, oldOrg := range c.Orgs {
+		newOrg := oldOrg
+		newOrg.Admin = expandGroups(c.Groups, newOrg.Admin)
+		newOrg.Write = expandGroups(c.Groups, newOrg.Write)
+		newOrg.Read = expandGroups(c.Groups, newOrg.Read)
 
-		for _, repo := range org.Repos {
-			repo.Write = expandGroups(c.Groups, repo.Write)
-			repo.Read = expandGroups(c.Groups, repo.Read)
+		if newOrg.Repos == nil {
+			newOrg.Repos = make(map[string]repoConfig)
 		}
+		for repoKey, oldRepo := range newOrg.Repos {
+			newRepo := oldRepo
+			newRepo.Write = expandGroups(c.Groups, newRepo.Write)
+			newRepo.Read = expandGroups(c.Groups, newRepo.Read)
+			newOrg.Repos[repoKey] = newRepo
+		}
+
+		c.Orgs[orgKey] = newOrg
 	}
 
 	return c, nil
@@ -241,6 +259,17 @@ func (a *AdminRepo) ensureSettings() (*adminConfig, error) {
 			if err != nil {
 				return a.settings, err
 			}
+
+			// Now that we've saved what should be a valid file, try loading it
+			// again.
+			settings, err = a.loadSettings()
+			if err != nil {
+				return a.settings, err
+			}
+		}
+
+		if settings.Groups == nil || len(settings.Groups["admins"]) == 0 {
+			return a.settings, errors.New("No admins defined")
 		}
 
 		a.settings = settings

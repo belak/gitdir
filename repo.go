@@ -36,6 +36,22 @@ type repo struct {
 	Path string
 }
 
+func EnsureRepo(c *Config, a *AdminRepo, pathname string) (repo, error) {
+	r, err := LookupRepo(c, pathname)
+	if err != nil {
+		return r, err
+	}
+
+	if a.RepoIsValid(r) {
+		_, err = r.Ensure()
+		if err != nil {
+			return r, err
+		}
+	}
+
+	return r, nil
+}
+
 func LookupRepo(c *Config, pathname string) (repo, error) {
 	r, err := parseRepo(c, pathname)
 	if err != nil {
@@ -50,6 +66,49 @@ func LookupRepo(c *Config, pathname string) (repo, error) {
 	r.Path = path.Join(c.BasePath, filepath.FromSlash(repoPath))
 
 	return r, nil
+}
+
+func (a *AdminRepo) RepoIsValid(r repo) bool {
+	a.RLock()
+	defer a.RUnlock()
+
+	switch r.Type {
+	case repoTypeAdmin:
+		// An admin repo is always valid
+		return true
+	case repoTypeTopLevel:
+		// A top level repo is valid if the repo is defined.
+		_, ok := a.settings.Repos[r.Name]
+		return ok
+	case repoTypeUserConfig:
+		// A user config repo is valid if the user is defined.
+		_, ok := a.users[r.Name]
+		return ok
+	case repoTypeUser:
+		// User repos are valid if user repos are enabled and the user is defined.
+		if !a.settings.Options.UserRepos {
+			return false
+		}
+		// TODO: users should be able to define these in their user config
+		_, ok := a.users[r.Dir]
+		return ok
+	case repoTypeOrgConfig:
+		// An org config repo is valid if the org is defined.
+		_, ok := a.settings.Orgs[r.Name]
+		return ok
+	case repoTypeOrg:
+		// An org config repo is valid if the org  isdefined and the org repo is
+		// defined.
+		org, ok := a.settings.Orgs[r.Dir]
+		if !ok {
+			return false
+		}
+		// TODO: org admins should be able to define these in their org config
+		_, ok = org.Repos[r.Name]
+		return ok
+	default:
+		return false
+	}
 }
 
 func parseRepo(c *Config, pathname string) (repo, error) {
@@ -72,7 +131,7 @@ func parseRepo(c *Config, pathname string) (repo, error) {
 			r.Type = repoTypeUserConfig
 		} else if strings.HasPrefix(r.Name, c.OrgPrefix) {
 			r.Name = r.Name[len(c.OrgPrefix):]
-			r.Type = repoTypeUserConfig
+			r.Type = repoTypeOrgConfig
 		} else {
 			r.Type = repoTypeTopLevel
 		}

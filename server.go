@@ -43,7 +43,8 @@ func newServer(c *Config) (*server, error) {
 		return nil, err
 	}
 
-	// Make sure it exists
+	// Make sure it exists - we can't use EnsureRepo because that requires us to
+	// have an admin repo.
 	rawRepo, err := repoLookup.Ensure()
 	if err != nil {
 		return nil, err

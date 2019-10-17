@@ -6,13 +6,13 @@ const sampleConfig = `# Groups can be used in any place a normal user could be u
 # recursively, but they cannot have loops.
 groups:
   admins:
-	- belak
+    - belak
 
 # Permissions for top-level repos
 repos:
-  admin:
-	write:
-	  - $admins
+  sample:
+    write:
+      - $admins
 
 # Org repos are accessible at @org-name/repo. Note that if admins is not
 # specified, it defaults to the admins group. By default, all members of an org
@@ -62,4 +62,4 @@ options:
   org_config_permissions: false
   org_config_repos: false
   org_config_users: false
-  `
+`

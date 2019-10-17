@@ -38,7 +38,7 @@ func (serv *server) cmdRepoAction(access accessType) sshCommand {
 		//   - Sanitize the name
 		repoName := sanitize(path.Clean("/" + strings.Trim(cmd[1], "/"))[1:])
 
-		repo, err := LookupRepo(config, repoName)
+		repo, err := EnsureRepo(config, serv.repo, repoName)
 		if err != nil {
 			writeStringFmt(s.Stderr(), "Invalid repo format %q\r\n", cmd[1])
 			return -1
@@ -48,16 +48,6 @@ func (serv *server) cmdRepoAction(access accessType) sshCommand {
 		// if the repo exists.
 		if !serv.repo.settings.UserHasRepoAccess(user, repo, access) {
 			return -1
-		}
-
-		// If they're trying to write and they have admin access, just create
-		// the repo if it doesn't exist. We may want a different method of
-		// creating, but this should work for now.
-		if access == accessTypeWrite && serv.repo.settings.UserHasRepoAccess(user, repo, accessTypeAdmin) {
-			_, err := repo.Ensure()
-			if err != nil {
-				return -1
-			}
 		}
 
 		returnCode := runCommand(log, s, []string{cmd[0], repo.Path})
