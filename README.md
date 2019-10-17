@@ -48,6 +48,8 @@ The following are required:
 
 The following are optional:
 
+- `GITDIR_BIND_ADDR` - The address and port to bind the service to. This
+  defaults to `:2222`.
 - `GITDIR_LOG_READABLE` - A true value if the log should be human readable
 - `GITDIR_LOG_DEBUG` - A true value if debug logging should be enabled
 

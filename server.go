@@ -25,7 +25,7 @@ func newServer(c *Config) (*server, error) {
 	}
 
 	serv.s = &ssh.Server{
-		Addr:             serv.c.Addr,
+		Addr:             serv.c.BindAddr,
 		Handler:          serv.handleSession,
 		PublicKeyHandler: serv.handlePublicKey,
 	}
@@ -100,7 +100,7 @@ func (serv *server) reloadInternal() error {
 }
 
 func (serv *server) ListenAndServe() error {
-	serv.log.Info().Str("port", serv.c.Addr).Msg("Starting SSH server")
+	serv.log.Info().Str("port", serv.c.BindAddr).Msg("Starting SSH server")
 
 	return serv.s.ListenAndServe()
 }

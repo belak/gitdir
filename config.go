@@ -14,7 +14,7 @@ import (
 // This file is meant for environment variable settings.
 
 type Config struct {
-	Addr       string
+	BindAddr   string
 	GitUser    string
 	BasePath   string
 	UserPrefix string
@@ -31,6 +31,10 @@ func NewEnvConfig() (*Config, error) {
 	c := NewDefaultConfig()
 	c.LogReadable = getenvBool("GITDIR_LOG_READABLE", false)
 	c.LogDebug = getenvBool("GITDIR_DEBUG", false)
+
+	if addr, ok := os.LookupEnv("GITDIR_BIND_ADDR"); ok {
+		c.BindAddr = addr
+	}
 
 	dir, ok := os.LookupEnv("GITDIR_BASE_DIR")
 	if !ok {
@@ -49,7 +53,7 @@ func NewEnvConfig() (*Config, error) {
 // NewDefaultConfig returns the base config.
 func NewDefaultConfig() *Config {
 	return &Config{
-		Addr:       ":2222",
+		BindAddr:   ":2222",
 		GitUser:    "git",
 		BasePath:   "./tmp",
 		UserPrefix: "~",
