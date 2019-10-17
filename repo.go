@@ -172,9 +172,9 @@ func (r RepoLookup) buildPath(c *Config) (string, error) {
 		return path.Join(c.BasePath, "admin", "user-"+r.Name), nil
 	case RepoTypeUser:
 		return path.Join(c.BasePath, "users", r.Dir, r.Name), nil
-	case RepoTypeOrg:
-		return path.Join(c.BasePath, "admin", "org-"+r.Name), nil
 	case RepoTypeOrgConfig:
+		return path.Join(c.BasePath, "admin", "org-"+r.Name), nil
+	case RepoTypeOrg:
 		return path.Join(c.BasePath, "orgs", r.Dir, r.Name), nil
 	}
 
