@@ -12,3 +12,6 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# Temporary folder for the repo storage.
+# TODO: remove this.
+tmp
