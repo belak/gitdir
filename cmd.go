@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/gliderlabs/ssh"
@@ -28,7 +29,7 @@ func (serv *server) cmdRepoAction(access accessType) sshCommand {
 			return 1
 		}
 
-		log, config, user := CtxExtract(ctx)
+		log, _, user := CtxExtract(ctx)
 
 		// Sanitize the repo name
 		//   - Trim all slashes from beginning and end
@@ -38,22 +39,15 @@ func (serv *server) cmdRepoAction(access accessType) sshCommand {
 		//   - Sanitize the name
 		repoName := sanitize(path.Clean("/" + strings.Trim(cmd[1], "/"))[1:])
 
-		repo, err := EnsureRepo(config, serv.repo, repoName)
+		repo, err := serv.LookupRepo(repoName, user, access)
 		if err != nil {
-			writeStringFmt(s.Stderr(), "Invalid repo format %q\r\n", cmd[1])
-			return -1
+
 		}
 
-		// If the user isn't allowed access, bail before we even bother checking
-		// if the repo exists.
-		if !serv.repo.settings.UserHasRepoAccess(user, repo, access) {
-			return -1
-		}
-
-		returnCode := runCommand(log, s, []string{cmd[0], repo.Path})
+		returnCode := runCommand(log, s, []string{cmd[0], filepath.FromSlash(repo.Path)})
 
 		switch repo.Type {
-		case repoTypeAdmin, repoTypeOrgConfig, repoTypeUserConfig:
+		case RepoTypeAdmin, RepoTypeOrgConfig, RepoTypeUserConfig:
 			// TODO: show error
 			err = serv.Reload()
 			if err != nil {

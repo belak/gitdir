@@ -1,6 +1,8 @@
 package main
 
 import (
+	"path/filepath"
+
 	"github.com/gliderlabs/ssh"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -38,14 +40,7 @@ func newServer(c *Config) (*server, error) {
 	}
 
 	// Look up the repository
-	repoLookup, err := LookupRepo(c, "admin")
-	if err != nil {
-		return nil, err
-	}
-
-	// Make sure it exists - we can't use EnsureRepo because that requires us to
-	// have an admin repo.
-	rawRepo, err := repoLookup.Ensure()
+	rawRepo, err := EnsureRepo(filepath.Join(c.BasePath, filepath.FromSlash("admin/admin")))
 	if err != nil {
 		return nil, err
 	}

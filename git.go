@@ -15,6 +15,28 @@ type Repo struct {
 	*git.Repository
 }
 
+// EnsureRepo will open a repository if it exists and try to create it if it
+// doesn't.
+func EnsureRepo(path string) (*Repo, error) {
+	repo, err := git.OpenRepositoryExtended(path, repoOpenFlags, "")
+	if err != nil {
+		gitError, ok := err.(*git.GitError)
+		// If it's not a GitError or it's not explicitly an ErrNotFound, we need
+		// to error.
+		if !ok || gitError.Class != git.ErrClassOs || gitError.Code != git.ErrNotFound {
+			return nil, err
+		}
+
+		// If the repo explicitly doesn't exist, we need to initialize it.
+		repo, err = git.InitRepository(path, true)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &Repo{repo}, nil
+}
+
 // HeadCommit is a convenience method to get the current Commit that HEAD points
 // to.
 func (r *Repo) HeadCommit() (*git.Commit, error) {

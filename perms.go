@@ -7,7 +7,7 @@ const (
 	accessTypeAdmin
 )
 
-func (c *adminConfig) UserHasRepoAccess(user *User, repo repo, access accessType) bool {
+func (c *adminConfig) UserHasRepoAccess(user *User, repo *RepoLookup, access accessType) bool {
 	// This shouldn't be possible
 	if user.IsAnonymous {
 		return false
@@ -19,8 +19,8 @@ func (c *adminConfig) UserHasRepoAccess(user *User, repo repo, access accessType
 	}
 
 	// Top level repos need to have permissions explicitly defined
-	if repo.Type == repoTypeTopLevel {
-		r, ok := c.Repos[repo.Dir]
+	if repo.Type == RepoTypeTopLevel {
+		r, ok := c.Repos[repo.Name]
 		if !ok {
 			return false
 		}
@@ -39,7 +39,7 @@ func (c *adminConfig) UserHasRepoAccess(user *User, repo repo, access accessType
 	}
 
 	// Users have all access levels in their own user dir
-	if repo.Type == repoTypeUser {
+	if repo.Type == RepoTypeUser {
 		// If user repos aren't enabled, we need to bail
 		if !c.Options.UserRepos {
 			return false
@@ -54,9 +54,9 @@ func (c *adminConfig) UserHasRepoAccess(user *User, repo repo, access accessType
 		return false
 	}
 
-	if repo.Type == repoTypeUserConfig {
+	if repo.Type == RepoTypeUserConfig {
 		// If the user is accessing their own repos, they have access.
-		if user.Username == repo.Dir {
+		if user.Username == repo.Name {
 			return true
 		}
 
@@ -64,7 +64,7 @@ func (c *adminConfig) UserHasRepoAccess(user *User, repo repo, access accessType
 		return false
 	}
 
-	if repo.Type == repoTypeOrg {
+	if repo.Type == RepoTypeOrg {
 		// If the org doesn't exist, no one has access
 		org, ok := c.Orgs[repo.Dir]
 		if !ok {
@@ -89,9 +89,9 @@ func (c *adminConfig) UserHasRepoAccess(user *User, repo repo, access accessType
 		return false
 	}
 
-	if repo.Type == repoTypeOrgConfig {
+	if repo.Type == RepoTypeOrgConfig {
 		// If the org doesn't exist, no one has access
-		org, ok := c.Orgs[repo.Dir]
+		org, ok := c.Orgs[repo.Name]
 		if !ok {
 			return false
 		}

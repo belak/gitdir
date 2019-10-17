@@ -3,88 +3,138 @@ package main
 import (
 	"errors"
 	"path"
-	"path/filepath"
 	"strings"
-
-	git "github.com/libgit2/git2go"
 )
 
-type repoType int
+type RepoType int
 
 const (
-	// admin
-	repoTypeAdmin repoType = iota
-	// repo
-	repoTypeTopLevel
-	// ~user
-	repoTypeUserConfig
-	// ~user/repo
-	repoTypeUser
-	// @org
-	repoTypeOrgConfig
-	// @org/repo
-	repoTypeOrg
 	// panic()
-	repoTypeUnknown
+	RepoTypeUnknown RepoType = iota
+	// admin
+	RepoTypeAdmin
+	// repo
+	RepoTypeTopLevel
+	// ~user
+	RepoTypeUserConfig
+	// ~user/repo
+	RepoTypeUser
+	// @org
+	RepoTypeOrgConfig
+	// @org/repo
+	RepoTypeOrg
 )
 
-type repo struct {
+// RepoLookup represents a repo query. This is a simple type used to
+type RepoLookup struct {
+	Type RepoType
 	Dir  string
 	Name string
-	Type repoType
-
 	Path string
 }
 
-func EnsureRepo(c *Config, a *AdminRepo, pathname string) (repo, error) {
-	r, err := LookupRepo(c, pathname)
+func ParseRepo(c *Config, pathname string) (*RepoLookup, error) {
+	r, err := parseRepoInternal(c, pathname)
 	if err != nil {
-		return r, err
+		return nil, err
 	}
 
-	if a.RepoIsValid(r) {
-		_, err = r.Ensure()
-		if err != nil {
-			return r, err
+	r.Path, err = r.buildPath(c)
+	if err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+func parseRepoInternal(c *Config, pathname string) (*RepoLookup, error) {
+	r := &RepoLookup{
+		Type: RepoTypeUnknown,
+	}
+
+	path := strings.Split(pathname, "/")
+
+	// All config types are technically in the root dir
+	if len(path) == 1 {
+		dir := path[0]
+		if path[0] == "admin" {
+			r.Type = RepoTypeAdmin
+		} else if strings.HasPrefix(dir, c.UserPrefix) {
+			r.Type = RepoTypeUserConfig
+			r.Name = dir[len(c.UserPrefix):]
+		} else if strings.HasPrefix(path[0], c.OrgPrefix) {
+			r.Type = RepoTypeOrgConfig
+			r.Name = dir[len(c.OrgPrefix):]
+		} else {
+			r.Type = RepoTypeTopLevel
+			r.Name = dir
 		}
+		return r, nil
 	}
 
-	return r, nil
+	if len(path) != 2 {
+		return nil, errors.New("Invalid repo format")
+	}
+
+	dir := path[0]
+	name := path[1]
+
+	if strings.HasPrefix(dir, c.UserPrefix) {
+		r.Type = RepoTypeUser
+		r.Dir = dir[len(c.UserPrefix):]
+		r.Name = name
+		return r, nil
+	}
+
+	if strings.HasPrefix(dir, c.OrgPrefix) {
+		r.Type = RepoTypeOrg
+		r.Dir = dir[len(c.OrgPrefix):]
+		r.Name = name
+		return r, nil
+	}
+
+	return nil, errors.New("Invalid repo format")
 }
 
-func LookupRepo(c *Config, pathname string) (repo, error) {
-	r, err := parseRepo(c, pathname)
+func (serv *server) LookupRepo(repoPath string, u *User, access accessType) (*RepoLookup, error) {
+	serv.repo.RLock()
+	defer serv.repo.RUnlock()
+
+	lookup, err := ParseRepo(serv.c, repoPath)
 	if err != nil {
-		return r, err
+		return nil, err
 	}
 
-	repoPath, err := r.buildPath()
-	if err != nil {
-		return r, err
+	if !serv.repo.lookupIsValid(lookup) {
+		return nil, errors.New("Repo does not exist")
 	}
 
-	r.Path = path.Join(c.BasePath, filepath.FromSlash(repoPath))
+	if !serv.repo.settings.UserHasRepoAccess(u, lookup, access) {
+		return nil, errors.New("Permission denied")
+	}
 
-	return r, nil
+	_, err = EnsureRepo(lookup.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	return lookup, nil
 }
 
-func (a *AdminRepo) RepoIsValid(r repo) bool {
-	a.RLock()
-	defer a.RUnlock()
-
+func (a *AdminRepo) lookupIsValid(r *RepoLookup) bool {
 	switch r.Type {
-	case repoTypeAdmin:
+	case RepoTypeAdmin:
 		// An admin repo is always valid
 		return true
-	case repoTypeTopLevel:
+	case RepoTypeTopLevel:
 		// A top level repo is valid if the repo is defined.
 		_, ok := a.settings.Repos[r.Name]
 		return ok
-	case repoTypeUserConfig:
+	case RepoTypeUserConfig:
 		// A user config repo is valid if the user is defined.
 		_, ok := a.users[r.Name]
 		return ok
-	case repoTypeUser:
+	case RepoTypeUser:
 		// User repos are valid if user repos are enabled and the user is defined.
 		if !a.settings.Options.UserRepos {
 			return false
@@ -92,11 +142,11 @@ func (a *AdminRepo) RepoIsValid(r repo) bool {
 		// TODO: users should be able to define these in their user config
 		_, ok := a.users[r.Dir]
 		return ok
-	case repoTypeOrgConfig:
+	case RepoTypeOrgConfig:
 		// An org config repo is valid if the org is defined.
 		_, ok := a.settings.Orgs[r.Name]
 		return ok
-	case repoTypeOrg:
+	case RepoTypeOrg:
 		// An org config repo is valid if the org  isdefined and the org repo is
 		// defined.
 		org, ok := a.settings.Orgs[r.Dir]
@@ -111,109 +161,21 @@ func (a *AdminRepo) RepoIsValid(r repo) bool {
 	}
 }
 
-func parseRepo(c *Config, pathname string) (repo, error) {
-	r := repo{
-		Dir:  path.Dir(pathname),
-		Name: path.Base(pathname),
-		Type: repoTypeUnknown,
-	}
-
-	if strings.Contains(r.Dir, "/") {
-		return r, errors.New("Invalid repo format")
-	}
-
-	// All config types are technically in the root dir
-	if r.Dir == "." {
-		if r.Name == "admin" {
-			r.Type = repoTypeAdmin
-		} else if strings.HasPrefix(r.Name, c.UserPrefix) {
-			r.Name = r.Name[len(c.UserPrefix):]
-			r.Type = repoTypeUserConfig
-		} else if strings.HasPrefix(r.Name, c.OrgPrefix) {
-			r.Name = r.Name[len(c.OrgPrefix):]
-			r.Type = repoTypeOrgConfig
-		} else {
-			r.Type = repoTypeTopLevel
-		}
-		return r, nil
-	}
-
-	if strings.HasPrefix(r.Dir, c.UserPrefix) {
-		r.Dir = r.Dir[len(c.UserPrefix):]
-		r.Type = repoTypeUser
-		return r, nil
-	}
-
-	if strings.HasPrefix(r.Dir, c.OrgPrefix) {
-		r.Dir = r.Dir[len(c.OrgPrefix):]
-		r.Type = repoTypeOrg
-		return r, nil
-	}
-
-	return r, errors.New("Invalid repo format")
-}
-
-func (r repo) Open() (*Repo, error) {
-	repo, err := git.OpenRepositoryExtended(r.Path, repoOpenFlags, "")
-	return &Repo{repo}, err
-}
-
-func (r repo) Exists() (bool, error) {
-	_, err := r.Open()
-	if err != nil {
-		if gitError, ok := err.(*git.GitError); ok {
-			if gitError.Class != git.ErrClassOs || gitError.Code != git.ErrNotFound {
-				return false, err
-			}
-
-			return false, nil
-		}
-
-		return false, err
-	}
-
-	return true, nil
-}
-
-func (r repo) Create() (*Repo, error) {
-	repo, err := git.InitRepository(r.Path, true)
-	if err != nil {
-		return nil, err
-	}
-	return &Repo{repo}, nil
-}
-
-func (r repo) Ensure() (*Repo, error) {
-	ok, err := r.Exists()
-	if err != nil {
-		return nil, err
-	}
-
-	if !ok {
-		return r.Create()
-	}
-
-	return r.Open()
-}
-
-func (r repo) buildPath() (string, error) {
-	// Mapping of repo type to path. Note that because user and org configs are
-	// also in the admin directory, it's technically possible for an admin to
-	// clone them using org-orgname or user-username. This is fine since admins
-	// are considered super-admins.
+func (r RepoLookup) buildPath(c *Config) (string, error) {
 	switch r.Type {
-	case repoTypeAdmin:
-		return path.Join("admin", r.Name), nil
-	case repoTypeTopLevel:
-		return path.Join("top-level", r.Name), nil
-	case repoTypeUserConfig:
-		return path.Join("admin", "user-"+r.Name), nil
-	case repoTypeUser:
-		return path.Join("users", r.Dir, r.Name), nil
-	case repoTypeOrg:
-		return path.Join("admin", "org-"+r.Name), nil
-	case repoTypeOrgConfig:
-		return path.Join("orgs", r.Dir, r.Name), nil
+	case RepoTypeAdmin:
+		// Admin repo is a static path
+		return path.Join(c.BasePath, "admin", "admin"), nil
+	case RepoTypeTopLevel:
+		return path.Join(c.BasePath, "top-level", r.Name), nil
+	case RepoTypeUserConfig:
+		return path.Join(c.BasePath, "admin", "user-"+r.Name), nil
+	case RepoTypeUser:
+		return path.Join(c.BasePath, "users", r.Dir, r.Name), nil
+	case RepoTypeOrg:
+		return path.Join(c.BasePath, "admin", "org-"+r.Name), nil
+	case RepoTypeOrgConfig:
+		return path.Join(c.BasePath, "orgs", r.Dir, r.Name), nil
 	}
 
 	return "", errors.New("Unsupported repo type")
