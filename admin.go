@@ -326,27 +326,31 @@ func (a *AdminRepo) GetServerKeys() (keyConfig, error) {
 	return kc, nil
 }
 
-func (a *AdminRepo) ensureServerKeys() (keyConfig, error) {
+func (a *AdminRepo) loadServerKeys() keyConfig {
 	var err error
-
-	// This should result in a copy. This is on purpose.
-	kc := a.keys
+	var kc keyConfig
 
 	// If a key doesn't exist, try to load it from a file. If that fails, we'll
 	// catch it later and write a new commit with updated keys.
-	if kc.RSA == nil {
-		kc.RSA, err = a.loadRSAKey()
-		if err != nil {
-			log.Warn().Err(err).Msg("Failed to load RSA key")
-		}
+	kc.RSA, err = a.loadRSAKey()
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to load RSA key")
 	}
 
-	if kc.Ed25519 == nil {
-		kc.Ed25519, err = a.loadEd25519Key()
-		if err != nil {
-			log.Warn().Err(err).Msg("Failed to load ed25519 key")
-		}
+	kc.Ed25519, err = a.loadEd25519Key()
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to load ed25519 key")
 	}
+
+	return kc
+}
+
+func (a *AdminRepo) ensureServerKeys() (keyConfig, error) {
+	var err error
+
+	// This function *should* return an error, but because we generate missing
+	// keys, it doesn't matter.
+	kc := a.loadServerKeys()
 
 	// If either of the keys is still nil, we need to generate them
 	if kc.RSA == nil || kc.Ed25519 == nil {

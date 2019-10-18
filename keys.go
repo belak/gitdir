@@ -35,7 +35,7 @@ func (pk *publicKey) Set(value string) error {
 	return nil
 }
 
-func (pk *publicKey) String() string {
+func (pk *publicKey) MarshalAuthorizedKey() string {
 	if pk == nil || pk.PublicKey == nil {
 		return ""
 	}
@@ -44,6 +44,10 @@ func (pk *publicKey) String() string {
 		return key + " " + pk.comment
 	}
 	return key
+}
+
+func (pk *publicKey) String() string {
+	return pk.MarshalAuthorizedKey()
 }
 
 // Implement loading from yaml files

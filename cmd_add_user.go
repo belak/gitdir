@@ -29,6 +29,70 @@ func addUserFlags() []cli.Flag {
 	}
 }
 
+func yamlLookupKey(n *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if n.Content[i].Kind == yaml.ScalarNode && n.Content[i].Value == key {
+			return n.Content[i+1]
+		}
+	}
+
+	return nil
+}
+
+func ensureAdmin(targetNode *yaml.Node, val bool) {
+	// We only want to set the value if it's true
+	if !val {
+		return
+	}
+
+	adminValue := yamlLookupKey(targetNode, "is_admin")
+
+	if adminValue == nil {
+		targetNode.Content = append(
+			targetNode.Content,
+			&yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Value: "is_admin",
+			},
+			&yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Tag:   "!!bool",
+				Value: "true",
+			},
+		)
+	} else {
+		*adminValue = yaml.Node{
+			Kind:  yaml.ScalarNode,
+			Tag:   "!!bool",
+			Value: "true",
+		}
+	}
+}
+
+func ensureKey(targetNode *yaml.Node, val *publicKey) {
+	keysValue := yamlLookupKey(targetNode, "keys")
+
+	if keysValue == nil {
+		keysValue = &yaml.Node{
+			Kind: yaml.SequenceNode,
+		}
+		targetNode.Content = append(
+			targetNode.Content,
+			&yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Value: "keys",
+			},
+			keysValue,
+		)
+	}
+
+	keysValue.Content = append(targetNode.Content, &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Style: yaml.SingleQuotedStyle,
+		Value: val.MarshalAuthorizedKey(),
+	})
+}
+
 func cmdAddUser(c *cli.Context) error {
 	config, err := NewCLIConfig(c)
 	if err != nil {
@@ -67,66 +131,8 @@ func cmdAddUser(c *cli.Context) error {
 
 		targetNode := rootNode.Content[0]
 
-		if admin {
-			var adminNode *yaml.Node
-			var adminNodeValue *yaml.Node
-			for i := 0; i+1 < len(targetNode.Content); i += 2 {
-				if targetNode.Content[i].Kind == yaml.ScalarNode && targetNode.Content[i].Value == "is_admin" {
-					adminNode = targetNode.Content[i]
-					adminNodeValue = targetNode.Content[i+1]
-				}
-			}
-
-			if adminNode == nil {
-				adminNode = &yaml.Node{
-					Kind:  yaml.ScalarNode,
-					Value: "is_admin",
-				}
-				adminNodeValue = &yaml.Node{
-					Kind:  yaml.ScalarNode,
-					Tag:   "!!bool",
-					Value: "true",
-				}
-				targetNode.Content = append(
-					targetNode.Content,
-					adminNode,
-					adminNodeValue,
-				)
-			} else {
-				*adminNodeValue = yaml.Node{
-					Kind:  yaml.ScalarNode,
-					Tag:   "!!bool",
-					Value: "true",
-				}
-			}
-		}
-
-		var keysNode *yaml.Node
-		var keysNodeValue *yaml.Node
-		for i := 0; i+1 < len(targetNode.Content); i += 2 {
-			if targetNode.Content[i].Kind == yaml.ScalarNode && targetNode.Content[i].Value == "keys" {
-				keysNode = targetNode.Content[i]
-				keysNodeValue = targetNode.Content[i+1]
-			}
-		}
-
-		if keysNode == nil {
-			keysNode = &yaml.Node{
-				Kind:  yaml.ScalarNode,
-				Value: "keys",
-			}
-			keysNodeValue = &yaml.Node{
-				Kind: yaml.SequenceNode,
-			}
-			targetNode.Content = append(targetNode.Content, keysNode, keysNodeValue)
-		}
-
-		targetNode = keysNodeValue
-		targetNode.Content = append(targetNode.Content, &yaml.Node{
-			Kind:  yaml.ScalarNode,
-			Style: yaml.SingleQuotedStyle,
-			Value: pubkey.String(),
-		})
+		ensureAdmin(targetNode, admin)
+		ensureKey(targetNode, pubkey)
 
 		return yaml.Marshal(rootNode)
 	})
