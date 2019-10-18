@@ -77,6 +77,13 @@ config as well as generated server ssh keys. These can be updated at any time
 (even at runtime) but if the server restarts and the keys cannot be loaded, they
 will be re-generated.
 
+Note that you will also need to add a user. The following command is a
+convenience for adding a user to the admin config.
+
+```
+$ go-git-dir --base-dir=/tmp/git add-user --username=belak --pubkey=$HOME/.ssh/id_rsa.pub
+```
+
 Note that you will need to manually clone the admin repository (at
 `$GITDIR_BASE_DIR/admin/admin`) to add a user as a .yml file in the users dir
 and define the admins group before things work as expected.
@@ -90,5 +97,5 @@ keys:
 
 ## Repo Creation
 
-Currently, if anyone has write access to a repo location, a repo will be
-auto-created on the first push there.
+For any repo defined in the config, on the first access of that repo (push or
+pull), it will be created automatically.

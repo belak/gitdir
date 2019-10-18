@@ -60,15 +60,32 @@ func cliFlags() []cli.Flag {
 			Value:  ":2222",
 			Usage:  "Host and port to bind to",
 		},
+
+		// TODO: move the following to the admin config
+		cli.StringFlag{
+			Name:   "user-prefix",
+			EnvVar: "GITDIR_USER_PREFIX",
+			Value:  "~",
+			Usage:  "Prefix to use when cloning user repos",
+		},
+		cli.StringFlag{
+			Name:   "org-prefix",
+			EnvVar: "GITDIR_ORG_PREFIX",
+			Value:  "@",
+			Usage:  "Prefix to use when cloning org repos",
+		},
 	}
 }
 
 func NewCLIConfig(ctx *cli.Context) (*Config, error) {
 	c := NewDefaultConfig()
+
 	c.LogReadable = ctx.GlobalBool("log-readable")
 	c.LogDebug = ctx.GlobalBool("debug")
 	c.BasePath = ctx.GlobalString("base-dir")
 	c.BindAddr = ctx.GlobalString("bind-addr")
+	c.UserPrefix = ctx.GlobalString("user-prefix")
+	c.OrgPrefix = ctx.GlobalString("org-prefix")
 
 	return c, validateConfig(c)
 }
