@@ -16,6 +16,12 @@ func main() {
 			Usage:  "run the server",
 			Action: cmdServe,
 		},
+		{
+			Name:   "add-user",
+			Usage:  "add a user to the config repo",
+			Action: cmdAddUser,
+			Flags:  addUserFlags(),
+		},
 	}
 
 	// We actually want to default to the serve command rather than help.

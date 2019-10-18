@@ -6,14 +6,47 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"io/ioutil"
+	"strings"
 
 	"github.com/gliderlabs/ssh"
+	gossh "golang.org/x/crypto/ssh"
 )
 
 type publicKey struct {
 	ssh.PublicKey
+	comment string
 }
 
+// Implement loading from a file
+func (pk *publicKey) Set(value string) error {
+	var err error
+
+	rawData, err := ioutil.ReadFile(value)
+	if err != nil {
+		return err
+	}
+
+	pk.PublicKey, pk.comment, _, _, err = ssh.ParseAuthorizedKey([]byte(rawData))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (pk *publicKey) String() string {
+	if pk == nil || pk.PublicKey == nil {
+		return ""
+	}
+	key := strings.TrimSpace(string(gossh.MarshalAuthorizedKey(pk)))
+	if pk.comment != "" {
+		return key + " " + pk.comment
+	}
+	return key
+}
+
+// Implement loading from yaml files
 func (pk *publicKey) UnmarshalYAML(unmarshal func(v interface{}) error) error {
 	var rawData string
 	err := unmarshal(&rawData)

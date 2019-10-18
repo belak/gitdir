@@ -65,10 +65,10 @@ func cliFlags() []cli.Flag {
 
 func NewCLIConfig(ctx *cli.Context) (*Config, error) {
 	c := NewDefaultConfig()
-	c.LogReadable = ctx.Bool("log-readable")
-	c.LogDebug = ctx.Bool("debug")
-	c.BasePath = ctx.String("base-dir")
-	c.BindAddr = ctx.String("bind-addr")
+	c.LogReadable = ctx.GlobalBool("log-readable")
+	c.LogDebug = ctx.GlobalBool("debug")
+	c.BasePath = ctx.GlobalString("base-dir")
+	c.BindAddr = ctx.GlobalString("bind-addr")
 
 	return c, validateConfig(c)
 }

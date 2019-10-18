@@ -152,6 +152,20 @@ func (b *CommitBuilder) AddFile(filePath string, data []byte) error {
 	return nil
 }
 
+// UpdateFile lets you pass in a callback to update a file's contents or create
+// a new file. Returning an error will cancel the file change and return that
+// error.
+func (b *CommitBuilder) UpdateFile(filePath string, cb func([]byte) ([]byte, error)) error {
+	// We explicitly ignore an error here because we always want to pass data to
+	// the callback.
+	data, _ := b.repo.GetFile(filePath)
+	data, err := cb(data)
+	if err != nil {
+		return err
+	}
+	return b.AddFile(filePath, data)
+}
+
 // Write will write all the staged files to disk. Note that this will always
 // target the latest commit in HEAD.
 func (b *CommitBuilder) Write(message string, author, committer *git.Signature) (*git.Oid, error) {
