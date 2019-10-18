@@ -3,9 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -13,20 +11,6 @@ import (
 	"github.com/gliderlabs/ssh"
 	"github.com/rs/zerolog"
 )
-
-func getenvBool(name string, def bool) bool {
-	rawVal, ok := os.LookupEnv(name)
-	if !ok {
-		return def
-	}
-
-	val, err := strconv.ParseBool(rawVal)
-	if err != nil {
-		return def
-	}
-
-	return val
-}
 
 func expandGroups(groups map[string][]string, users []string) []string {
 	out := []string{}
@@ -137,8 +121,22 @@ func sanitize(in string) string {
 func runCommand(log *zerolog.Logger, session ssh.Session, args []string) int {
 	cmd := exec.Command(args[0], args[1:]...)
 	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get stdin pipe")
+		return 1
+	}
+
 	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get stdout pipe")
+		return 1
+	}
+
 	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get stderr pipe")
+		return 1
+	}
 
 	wg := &sync.WaitGroup{}
 	wg.Add(2)

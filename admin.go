@@ -245,10 +245,7 @@ func (a *AdminRepo) ensureSettings() (*adminConfig, error) {
 
 			// If we failed to load config, we can update the config with our
 			// own sample config.
-			builder, err := a.repo.CommitBuilder()
-			if err != nil {
-				return a.settings, err
-			}
+			builder := a.repo.CommitBuilder()
 
 			err = builder.AddFile("config.yml", []byte(sampleConfig))
 			if err != nil {
@@ -353,10 +350,7 @@ func (a *AdminRepo) ensureServerKeys() (keyConfig, error) {
 
 	// If either of the keys is still nil, we need to generate them
 	if kc.RSA == nil || kc.Ed25519 == nil {
-		builder, err := a.repo.CommitBuilder()
-		if err != nil {
-			return a.keys, err
-		}
+		builder := a.repo.CommitBuilder()
 
 		if kc.RSA == nil {
 			log.Warn().Msg("Generating new RSA key")
@@ -366,7 +360,10 @@ func (a *AdminRepo) ensureServerKeys() (keyConfig, error) {
 			}
 
 			rsaBytes := marshalRSAKey(kc.RSA)
-			builder.AddFile("ssh/id_rsa", rsaBytes)
+			err = builder.AddFile("ssh/id_rsa", rsaBytes)
+			if err != nil {
+				return a.keys, err
+			}
 		}
 
 		if kc.Ed25519 == nil {
@@ -380,7 +377,10 @@ func (a *AdminRepo) ensureServerKeys() (keyConfig, error) {
 			if err != nil {
 				return a.keys, err
 			}
-			builder.AddFile("ssh/id_ed25519", ed25519Bytes)
+			err = builder.AddFile("ssh/id_ed25519", ed25519Bytes)
+			if err != nil {
+				return a.keys, err
+			}
 		}
 
 		_, err = builder.Write("Updated ssh keys", nil, nil)

@@ -108,11 +108,11 @@ type CommitBuilder struct {
 }
 
 // CommitBuilder creates a new commit builder for the given repo.
-func (r *Repo) CommitBuilder() (*CommitBuilder, error) {
+func (r *Repo) CommitBuilder() *CommitBuilder {
 	return &CommitBuilder{
 		r,
 		make(map[string]interface{}),
-	}, nil
+	}
 }
 
 // AddFile adds a file to be written by the commit builder. Nested paths can be
@@ -209,11 +209,57 @@ func (b *CommitBuilder) Write(message string, author, committer *git.Signature) 
 	return b.repo.CreateCommit("HEAD", author, committer, message, tree, parents...)
 }
 
+func (b *CommitBuilder) buildItem(
+	builder *git.TreeBuilder,
+	parent *git.Tree,
+	fileName string,
+	rawItem interface{},
+) error {
+	var err error
+	if rawItem == nil {
+		return builder.Remove(fileName)
+	}
+
+	switch item := rawItem.(type) {
+	case map[string]interface{}:
+		var childTree *git.Tree
+		var childEntry *git.TreeEntry
+
+		if parent != nil {
+			childEntry = parent.EntryByName(fileName)
+		}
+
+		if childEntry != nil && childEntry.Type == git.ObjectTree {
+			childTree, err = b.repo.LookupTree(childEntry.Id)
+			if err != nil {
+				return err
+			}
+		}
+
+		// If we got a map we need to recurse
+		tree, err := b.recursiveBuildTree(childTree, item)
+		if err != nil {
+			return err
+		}
+
+		return builder.Insert(fileName, tree.AsObject().Id(), git.FilemodeTree)
+	case []byte:
+		oid, err := b.repo.CreateBlobFromBuffer(item)
+		if err != nil {
+			return err
+		}
+		return builder.Insert(fileName, oid, git.FilemodeBlob)
+	default:
+		return errors.New("Invalid file tree")
+	}
+}
+
 func (b *CommitBuilder) recursiveBuildTree(parent *git.Tree, data map[string]interface{}) (*git.Tree, error) {
 	var err error
 	var builder *git.TreeBuilder
 
-	// Grab the tree builder
+	// Grab the tree builder. If we were passed in a parent, we use that,
+	// otherwise, make a new tree.
 	if parent == nil {
 		builder, err = b.repo.TreeBuilder()
 	} else {
@@ -225,49 +271,10 @@ func (b *CommitBuilder) recursiveBuildTree(parent *git.Tree, data map[string]int
 
 	// Loop through each one of our file entries and create tree entries for
 	// them.
-	for key, rawItem := range data {
-		if rawItem == nil {
-			err = builder.Remove(key)
-			if err != nil {
-				return nil, err
-			}
-			continue
-		}
-
-		switch item := rawItem.(type) {
-		case map[string]interface{}:
-			var childTree *git.Tree
-
-			// If we got a map we need to recurse
-			childEntry := parent.EntryByName(key)
-
-			if childEntry != nil && childEntry.Type == git.ObjectTree {
-				childTree, err = b.repo.LookupTree(childEntry.Id)
-				if err != nil {
-					return nil, err
-				}
-			}
-
-			tree, err := b.recursiveBuildTree(childTree, item)
-			if err != nil {
-				return nil, err
-			}
-
-			err = builder.Insert(key, tree.AsObject().Id(), git.FilemodeTree)
-			if err != nil {
-				return nil, err
-			}
-		case []byte:
-			oid, err := b.repo.CreateBlobFromBuffer(item)
-			if err != nil {
-				return nil, err
-			}
-			err = builder.Insert(key, oid, git.FilemodeBlob)
-			if err != nil {
-				return nil, err
-			}
-		default:
-			return nil, errors.New("Invalid file tree")
+	for fileName, rawItem := range data {
+		err = b.buildItem(builder, parent, fileName, rawItem)
+		if err != nil {
+			return nil, err
 		}
 	}
 

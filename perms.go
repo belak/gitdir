@@ -4,7 +4,6 @@ const (
 	accessTypeUnknown accessType = iota
 	accessTypeRead
 	accessTypeWrite
-	accessTypeAdmin
 )
 
 func (c *adminConfig) UserHasRepoAccess(user *User, repo *RepoLookup, access accessType) bool {
@@ -56,12 +55,7 @@ func (c *adminConfig) UserHasRepoAccess(user *User, repo *RepoLookup, access acc
 
 	if repo.Type == RepoTypeUserConfig {
 		// If the user is accessing their own repos, they have access.
-		if user.Username == repo.Name {
-			return true
-		}
-
-		// Otherwise, they don't have access
-		return false
+		return user.Username == repo.Name
 	}
 
 	if repo.Type == RepoTypeOrg {
@@ -105,5 +99,4 @@ func (c *adminConfig) UserHasRepoAccess(user *User, repo *RepoLookup, access acc
 	}
 
 	return false
-
 }

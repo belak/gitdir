@@ -151,12 +151,11 @@ func (serv *server) handleSession(s ssh.Session) {
 		cmd = []string{"whoami"}
 	}
 
-	var exit int = 1
-
 	tmpLog := slog.With().Str("cmd", cmd[0]).Logger()
 	slog = &tmpLog
 	ctx = WithLogger(ctx, slog)
 
+	var exit int
 	if cb := serv.sshCommands[cmd[0]]; cb != nil {
 		slog.Info().Msg("Running command")
 		exit = cb(ctx, s, cmd)
@@ -166,5 +165,5 @@ func (serv *server) handleSession(s ssh.Session) {
 	}
 
 	slog.Info().Int("return_code", exit).Msg("Return code")
-	s.Exit(exit)
+	_ = s.Exit(exit)
 }

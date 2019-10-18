@@ -44,10 +44,7 @@ func cmdAddUser(c *cli.Context) error {
 		return err
 	}
 
-	builder, err := repo.CommitBuilder()
-	if err != nil {
-		return err
-	}
+	builder := repo.CommitBuilder()
 
 	err = builder.UpdateFile("users/"+username+".yml", func(data []byte) ([]byte, error) {
 		rootNode := &yaml.Node{}

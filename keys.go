@@ -27,7 +27,7 @@ func (pk *publicKey) Set(value string) error {
 		return err
 	}
 
-	pk.PublicKey, pk.comment, _, _, err = ssh.ParseAuthorizedKey([]byte(rawData))
+	pk.PublicKey, pk.comment, _, _, err = ssh.ParseAuthorizedKey(rawData)
 	if err != nil {
 		return err
 	}

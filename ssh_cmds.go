@@ -13,19 +13,19 @@ type sshCommand func(ctx context.Context, s ssh.Session, cmd []string) int
 
 func cmdWhoami(ctx context.Context, s ssh.Session, cmd []string) int {
 	user := CtxUser(ctx)
-	writeStringFmt(s, "logged in as %s\r\n", user.Username)
+	_ = writeStringFmt(s, "logged in as %s\r\n", user.Username)
 	return 0
 }
 
 func cmdNotFound(ctx context.Context, s ssh.Session, cmd []string) int {
-	writeStringFmt(s, "command %q not found\r\n", cmd[0])
+	_ = writeStringFmt(s.Stderr(), "command %q not found\r\n", cmd[0])
 	return 1
 }
 
 func (serv *server) cmdRepoAction(access accessType) sshCommand {
 	return func(ctx context.Context, s ssh.Session, cmd []string) int {
 		if len(cmd) != 2 {
-			writeStringFmt(s.Stderr(), "Missing repo name argument")
+			_ = writeStringFmt(s.Stderr(), "Missing repo name argument")
 			return 1
 		}
 
@@ -41,7 +41,7 @@ func (serv *server) cmdRepoAction(access accessType) sshCommand {
 
 		repo, err := serv.LookupRepo(repoName, user, access)
 		if err != nil {
-
+			return -1
 		}
 
 		returnCode := runCommand(log, s, []string{cmd[0], filepath.FromSlash(repo.Path)})
