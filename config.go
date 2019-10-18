@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"os"
+
+	"github.com/urfave/cli"
 )
 
 // There are two places things can be configured. Environment variables are
@@ -24,30 +26,51 @@ type Config struct {
 	LogDebug    bool
 }
 
-// NewEnvConfig will return a new config object and whether or not the config is
-// valid. Note that this will always return a config object even if it also
-// returns an error so logging can be configured properly.
-func NewEnvConfig() (*Config, error) {
-	c := NewDefaultConfig()
-	c.LogReadable = getenvBool("GITDIR_LOG_READABLE", false)
-	c.LogDebug = getenvBool("GITDIR_DEBUG", false)
-
-	if addr, ok := os.LookupEnv("GITDIR_BIND_ADDR"); ok {
-		c.BindAddr = addr
-	}
-
-	dir, ok := os.LookupEnv("GITDIR_BASE_DIR")
-	if !ok {
-		return c, errors.New("No GITDIR_BASE_DIR set")
-	}
-
-	if info, err := os.Stat(dir); os.IsNotExist(err) {
-		return c, errors.New("GITDIR_BASE_DIR does not exist")
+func validateConfig(c *Config) error {
+	if info, err := os.Stat(c.BasePath); os.IsNotExist(err) {
+		return errors.New("GITDIR_BASE_DIR does not exist")
 	} else if !info.IsDir() {
-		return c, errors.New("GITDIR_BASE_DIR is not a directory")
+		return errors.New("GITDIR_BASE_DIR is not a directory")
 	}
 
-	return c, nil
+	return nil
+}
+
+func cliFlags() []cli.Flag {
+	return []cli.Flag{
+		cli.BoolFlag{
+			Name:   "debug",
+			EnvVar: "GITDIR_DEBUG",
+			Usage:  "Enable debug logging",
+		},
+		cli.BoolFlag{
+			Name:   "log-readable",
+			EnvVar: "GITDIR_LOG_READABLE",
+			Usage:  "Enable human readable logging",
+		},
+		cli.StringFlag{
+			Name:     "base-dir",
+			EnvVar:   "GITDIR_BASE_DIR",
+			Required: true,
+			Usage:    "Which directory to operate on",
+		},
+		cli.StringFlag{
+			Name:   "bind-addr",
+			EnvVar: "GITDIR_BIND_ADDR",
+			Value:  ":2222",
+			Usage:  "Host and port to bind to",
+		},
+	}
+}
+
+func NewCLIConfig(ctx *cli.Context) (*Config, error) {
+	c := NewDefaultConfig()
+	c.LogReadable = ctx.Bool("log-readable")
+	c.LogDebug = ctx.Bool("debug")
+	c.BasePath = ctx.String("base-dir")
+	c.BindAddr = ctx.String("bind-addr")
+
+	return c, validateConfig(c)
 }
 
 // NewDefaultConfig returns the base config.

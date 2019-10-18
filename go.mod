@@ -9,6 +9,7 @@ require (
 	github.com/libgit2/git2go v0.0.0-00010101000000-000000000000
 	github.com/rs/zerolog v1.15.0
 	github.com/stretchr/testify v1.4.0
+	github.com/urfave/cli v1.22.1
 	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
 	gopkg.in/yaml.v3 v3.0.0-20191010095647-fc94e3f71652
 )

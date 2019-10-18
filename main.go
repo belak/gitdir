@@ -1,35 +1,28 @@
 package main
 
 import (
-	"github.com/rs/zerolog"
+	"os"
+
 	"github.com/rs/zerolog/log"
+	"github.com/urfave/cli"
 )
 
 func main() {
-	// Load config first so we know how to set the logger
-	c, err := NewEnvConfig()
-
-	// Set up the logger
-	if c.LogReadable {
-		log.Logger = zerolog.New(zerolog.NewConsoleWriter()).With().Timestamp().Logger()
+	app := cli.NewApp()
+	app.Flags = cliFlags()
+	app.Commands = []cli.Command{
+		{
+			Name:   "serve",
+			Usage:  "run the server",
+			Action: cmdServe,
+		},
 	}
-	if c.LogDebug {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	}
 
-	log.Info().Msg("Starting go-git-dir")
+	// We actually want to default to the serve command rather than help.
+	app.Action = cmdServe
 
+	err := app.Run(os.Args)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Error loading environment config")
-	}
-
-	serv, err := newServer(NewDefaultConfig())
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to load SSH server")
-	}
-
-	err = serv.ListenAndServe()
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to run SSH server")
+		log.Fatal().Err(err).Msg("Command failed")
 	}
 }
