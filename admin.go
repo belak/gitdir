@@ -6,12 +6,13 @@ import (
 	"errors"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/gliderlabs/ssh"
-	git "github.com/libgit2/git2go"
 	"github.com/rs/zerolog/log"
 	gossh "golang.org/x/crypto/ssh"
+	"gopkg.in/src-d/go-billy.v4"
+	git "gopkg.in/src-d/go-git.v4"
+	"gopkg.in/src-d/go-git.v4/plumbing"
 	yaml "gopkg.in/yaml.v3"
 )
 
@@ -32,7 +33,7 @@ var AnonymousUser = &User{
 }
 
 func (a *AdminRepo) LoadUser(username string) (*User, error) {
-	data, err := a.repo.GetFile("users/" + username + ".yml")
+	data, err := readFile(a.worktreeFS, "users/"+username+".yml")
 	if err != nil {
 		return nil, err
 	}
@@ -47,8 +48,13 @@ func (a *AdminRepo) LoadUser(username string) (*User, error) {
 }
 
 type AdminRepo struct {
-	sync.RWMutex
-	repo *Repo
+	*sync.RWMutex
+
+	// We keep the worktree separate from the repo so we can still have a bare
+	// repo. This also lets us do fun things like keep the worktree in memory.
+	repo       *git.Repository
+	worktree   *git.Worktree
+	worktreeFS billy.Filesystem
 
 	settings *adminConfig
 	keys     keyConfig
@@ -95,20 +101,19 @@ type adminConfig struct {
 	Options adminOptions
 }
 
-func newAdminGitSignature() *git.Signature {
-	return &git.Signature{
-		Name:  "root",
-		Email: "root@localhost",
-		When:  time.Now(),
-	}
-}
+func (c *Config) OpenAdminRepo() (*AdminRepo, error) {
+	var err error
 
-func OpenAdminRepo(repo *Repo) (*AdminRepo, error) {
 	a := &AdminRepo{
-		repo: repo,
+		RWMutex: &sync.RWMutex{},
 	}
 
-	err := a.Reload()
+	a.repo, a.worktreeFS, err = c.EnsureRepo("admin/admin")
+	if err != nil {
+		return nil, err
+	}
+
+	err = a.Reload()
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +128,21 @@ func (a *AdminRepo) Reload() error {
 	a.Lock()
 	defer a.Unlock()
 
+	var err error
+
+	a.worktree, err = a.repo.Worktree()
+	if err != nil {
+		return err
+	}
+
+	// Reset the worktree to the head
+	err = a.worktree.Checkout(&git.CheckoutOptions{
+		Force: true,
+	})
+	if err != nil && err != plumbing.ErrReferenceNotFound {
+		return err
+	}
+
 	// Store the original values in case something fails to load
 	kc := a.keys
 	settings := a.settings
@@ -136,7 +156,7 @@ func (a *AdminRepo) Reload() error {
 	a.userKeys = nil
 
 	// Load everything from the config again
-	_, err := a.ensureSettings()
+	_, err = a.ensureSettings()
 	if err != nil {
 		a.keys = kc
 		a.settings = settings
@@ -178,7 +198,7 @@ func (a *AdminRepo) GetSettings() (*adminConfig, error) {
 }
 
 func (a *AdminRepo) loadSettings() (*adminConfig, error) {
-	data, err := a.repo.GetFile("config.yml")
+	data, err := readFile(a.worktreeFS, "config.yml")
 	if err != nil {
 		return nil, err
 	}
@@ -245,14 +265,19 @@ func (a *AdminRepo) ensureSettings() (*adminConfig, error) {
 
 			// If we failed to load config, we can update the config with our
 			// own sample config.
-			builder := a.repo.CommitBuilder()
-
-			err = builder.AddFile("config.yml", []byte(sampleConfig))
+			err = createFile(a.worktreeFS, "config.yml", []byte(sampleConfig))
 			if err != nil {
 				return a.settings, err
 			}
 
-			_, err = builder.Write("Updated config.yml", nil, nil)
+			_, err = a.worktree.Add("config.yml")
+			if err != nil {
+				return a.settings, err
+			}
+
+			_, err = a.worktree.Commit("Added sample config.yml", &git.CommitOptions{
+				Author: newAdminGitSignature(),
+			})
 			if err != nil {
 				return a.settings, err
 			}
@@ -276,7 +301,7 @@ func (a *AdminRepo) ensureSettings() (*adminConfig, error) {
 }
 
 func (a *AdminRepo) loadRSAKey() (*rsa.PrivateKey, error) {
-	data, err := a.repo.GetFile("ssh/id_rsa")
+	data, err := readFile(a.worktreeFS, "ssh/id_rsa")
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +320,7 @@ func (a *AdminRepo) loadRSAKey() (*rsa.PrivateKey, error) {
 }
 
 func (a *AdminRepo) loadEd25519Key() (ed25519.PrivateKey, error) {
-	data, err := a.repo.GetFile("ssh/id_ed25519")
+	data, err := readFile(a.worktreeFS, "ssh/id_ed25519")
 	if err != nil {
 		return nil, err
 	}
@@ -354,8 +379,6 @@ func (a *AdminRepo) ensureServerKeys() (keyConfig, error) {
 
 	// If either of the keys is still nil, we need to generate them
 	if kc.RSA == nil || kc.Ed25519 == nil {
-		builder := a.repo.CommitBuilder()
-
 		if kc.RSA == nil {
 			log.Warn().Msg("Generating new RSA key")
 			kc.RSA, err = generateRSAKey()
@@ -364,7 +387,18 @@ func (a *AdminRepo) ensureServerKeys() (keyConfig, error) {
 			}
 
 			rsaBytes := marshalRSAKey(kc.RSA)
-			err = builder.AddFile("ssh/id_rsa", rsaBytes)
+
+			f, err := a.worktreeFS.Create("ssh/id_rsa")
+			if err != nil {
+				return a.keys, err
+			}
+
+			_, err = f.Write(rsaBytes)
+			if err != nil {
+				return a.keys, err
+			}
+
+			_, err = a.worktree.Add("ssh/id_rsa")
 			if err != nil {
 				return a.keys, err
 			}
@@ -381,13 +415,26 @@ func (a *AdminRepo) ensureServerKeys() (keyConfig, error) {
 			if err != nil {
 				return a.keys, err
 			}
-			err = builder.AddFile("ssh/id_ed25519", ed25519Bytes)
+
+			f, err := a.worktreeFS.Create("ssh/id_ed25519")
+			if err != nil {
+				return a.keys, err
+			}
+
+			_, err = f.Write(ed25519Bytes)
+			if err != nil {
+				return a.keys, err
+			}
+
+			_, err = a.worktree.Add("ssh/id_ed25519")
 			if err != nil {
 				return a.keys, err
 			}
 		}
 
-		_, err = builder.Write("Updated ssh keys", nil, nil)
+		_, err = a.worktree.Commit("Updated ssh keys", &git.CommitOptions{
+			Author: newAdminGitSignature(),
+		})
 		if err != nil {
 			return a.keys, err
 		}
@@ -447,48 +494,44 @@ func (a *AdminRepo) loadUsers() (map[string]*User, map[string]string, error) {
 	users := make(map[string]*User)
 	userKeys := make(map[string]string)
 
-	rootTree, err := a.repo.HeadTree()
+	entries, err := a.worktreeFS.ReadDir("users")
 	if err != nil {
 		return nil, nil, err
 	}
 
-	treeEntry := rootTree.EntryByName("users")
-	if treeEntry == nil || treeEntry.Type != git.ObjectTree {
-		return nil, nil, errors.New("Users directory does not exist")
-	}
-
-	tree, err := a.repo.LookupTree(treeEntry.Id)
+	usersFS, err := a.worktreeFS.Chroot("users")
 	if err != nil {
 		return nil, nil, err
 	}
 
-	err = tree.Walk(func(name string, entry *git.TreeEntry) int {
-		// Skip everything that isn't a blob. This has the advantage of skipping
-		// sub-trees.
-		if entry.Type != git.ObjectBlob {
-			return 1
+	for _, entry := range entries {
+		// Skip directories
+		if entry.IsDir() {
+			continue
 		}
 
-		if !strings.HasSuffix(entry.Name, ".yml") {
-			return 1
+		filename := entry.Name()
+		if !strings.HasSuffix(filename, ".yml") {
+			continue
 		}
 
-		// Remove .yml from the name
-		username := sanitize(entry.Name[:len(entry.Name)-4])
+		username := sanitize(filename[:len(filename)-4])
 
-		blob, err := a.repo.LookupBlob(entry.Id)
+		ulog := log.With().Str("username", username).Logger()
+
+		ulog.Debug().Msg("Found user")
+
+		data, err := readFile(usersFS, filename)
 		if err != nil {
-			return -1
+			log.Warn().Err(err).Msg("Failed to load user")
+			continue
 		}
-
-		data := blob.Contents()
-
-		log.Debug().Str("username", username).Msg("Found user")
 
 		u := &User{Username: username}
 		err = yaml.Unmarshal(data, u)
 		if err != nil {
-			return -1
+			log.Warn().Err(err).Msg("Failed to load user")
+			continue
 		}
 
 		// There are two places a user can be defined as an admin.
@@ -500,11 +543,6 @@ func (a *AdminRepo) loadUsers() (map[string]*User, map[string]string, error) {
 		for _, k := range u.PublicKeys {
 			userKeys[string(k.Marshal())] = username
 		}
-
-		return 0
-	})
-	if err != nil {
-		return nil, nil, err
 	}
 
 	return users, userKeys, nil

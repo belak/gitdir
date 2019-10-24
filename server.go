@@ -1,8 +1,6 @@
 package main
 
 import (
-	"path/filepath"
-
 	"github.com/gliderlabs/ssh"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -21,6 +19,8 @@ type server struct {
 }
 
 func newServer(c *Config) (*server, error) {
+	var err error
+
 	serv := &server{
 		log: log.Logger,
 		c:   c,
@@ -39,13 +39,7 @@ func newServer(c *Config) (*server, error) {
 		"git-upload-pack":  serv.cmdRepoAction(accessTypeRead),
 	}
 
-	// Look up the repository
-	rawRepo, err := EnsureRepo(filepath.Join(c.BasePath, filepath.FromSlash("admin/admin")))
-	if err != nil {
-		return nil, err
-	}
-
-	serv.repo, err = OpenAdminRepo(rawRepo)
+	serv.repo, err = c.OpenAdminRepo()
 	if err != nil {
 		return nil, err
 	}

@@ -2,10 +2,11 @@ package main
 
 import (
 	"errors"
-	"path/filepath"
 
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli"
+	git "gopkg.in/src-d/go-git.v4"
+	"gopkg.in/src-d/go-git.v4/plumbing"
 	yaml "gopkg.in/yaml.v3"
 )
 
@@ -47,6 +48,12 @@ func ensureAdmin(targetNode *yaml.Node, val bool) {
 
 	adminValue := yamlLookupKey(targetNode, "is_admin")
 
+	newNode := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Tag:   "!!bool",
+		Value: "true",
+	}
+
 	if adminValue == nil {
 		targetNode.Content = append(
 			targetNode.Content,
@@ -54,18 +61,10 @@ func ensureAdmin(targetNode *yaml.Node, val bool) {
 				Kind:  yaml.ScalarNode,
 				Value: "is_admin",
 			},
-			&yaml.Node{
-				Kind:  yaml.ScalarNode,
-				Tag:   "!!bool",
-				Value: "true",
-			},
+			newNode,
 		)
 	} else {
-		*adminValue = yaml.Node{
-			Kind:  yaml.ScalarNode,
-			Tag:   "!!bool",
-			Value: "true",
-		}
+		*adminValue = *newNode
 	}
 }
 
@@ -86,9 +85,8 @@ func ensureKey(targetNode *yaml.Node, val *publicKey) {
 		)
 	}
 
-	keysValue.Content = append(targetNode.Content, &yaml.Node{
+	keysValue.Content = append(keysValue.Content, &yaml.Node{
 		Kind:  yaml.ScalarNode,
-		Style: yaml.SingleQuotedStyle,
 		Value: val.MarshalAuthorizedKey(),
 	})
 }
@@ -103,44 +101,80 @@ func cmdAddUser(c *cli.Context) error {
 	pubkey := c.Generic("pubkey").(*publicKey)
 	admin := c.Bool("admin")
 
-	repo, err := EnsureRepo(filepath.Join(config.BasePath, "admin", "admin"))
+	repo, worktreeFS, err := config.EnsureRepo("admin/admin")
 	if err != nil {
 		return err
 	}
 
-	builder := repo.CommitBuilder()
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return err
+	}
 
-	err = builder.UpdateFile("users/"+username+".yml", func(data []byte) ([]byte, error) {
-		rootNode := &yaml.Node{}
-
-		// We explicitly ignore this error so we can manually make a tree
-		_ = yaml.Unmarshal(data, rootNode)
-
-		if rootNode == nil {
-			rootNode = &yaml.Node{
-				Kind: yaml.DocumentNode,
-				Content: []*yaml.Node{{
-					Kind: yaml.MappingNode,
-				}},
-			}
-		}
-
-		if len(rootNode.Content) != 1 || rootNode.Content[0].Kind != yaml.MappingNode {
-			return nil, errors.New("Root is not a valid yaml document")
-		}
-
-		targetNode := rootNode.Content[0]
-
-		ensureAdmin(targetNode, admin)
-		ensureKey(targetNode, pubkey)
-
-		return yaml.Marshal(rootNode)
+	err = worktree.Checkout(&git.CheckoutOptions{
+		Force: true,
 	})
+	if err != nil && err != plumbing.ErrReferenceNotFound {
+		return err
+	}
+
+	filename := "users/" + username + ".yml"
+
+	data, err := readFile(worktreeFS, filename)
+	if err != nil {
+		log.Warn().Str("filename", filename).Err(err).Msg("File missing")
+	}
+
+	rootNode := &yaml.Node{
+		Kind: yaml.DocumentNode,
+	}
+
+	// We explicitly ignore this error so we can manually make a tree
+	_ = yaml.Unmarshal(data, rootNode)
+
+	if len(rootNode.Content) == 0 {
+		rootNode.Content = append(rootNode.Content, &yaml.Node{
+			Kind: yaml.MappingNode,
+		})
+	}
+
+	if len(rootNode.Content) != 1 || rootNode.Content[0].Kind != yaml.MappingNode {
+		return errors.New("Root is not a valid yaml document")
+	}
+
+	targetNode := rootNode.Content[0]
+
+	ensureAdmin(targetNode, admin)
+	ensureKey(targetNode, pubkey)
+
+	out, err := yaml.Marshal(rootNode)
 	if err != nil {
 		return err
 	}
 
-	_, err = builder.Write("Added key to "+username, nil, nil)
+	f, err := worktreeFS.Create(filename)
+	if err != nil {
+		return err
+	}
+
+	_, err = f.Write(out)
+	if err != nil {
+		return err
+	}
+
+	err = f.Close()
+	if err != nil {
+		return err
+	}
+
+	_, err = worktree.Add(filename)
+	if err != nil {
+		return err
+	}
+
+	_, err = worktree.Commit("Added key to "+username, &git.CommitOptions{
+		Author: newAdminGitSignature(),
+	})
 	if err != nil {
 		return err
 	}

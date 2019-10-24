@@ -5,6 +5,12 @@ import (
 	"os"
 
 	"github.com/urfave/cli"
+	"gopkg.in/src-d/go-billy.v4"
+	"gopkg.in/src-d/go-billy.v4/memfs"
+	"gopkg.in/src-d/go-billy.v4/osfs"
+	git "gopkg.in/src-d/go-git.v4"
+	"gopkg.in/src-d/go-git.v4/plumbing/cache"
+	"gopkg.in/src-d/go-git.v4/storage/filesystem"
 )
 
 // There are two places things can be configured. Environment variables are
@@ -99,4 +105,37 @@ func NewDefaultConfig() *Config {
 		UserPrefix: "~",
 		OrgPrefix:  "@",
 	}
+}
+
+// EnsureRepo will open a repository if it exists and try to create it if it
+// doesn't.
+func (c *Config) EnsureRepo(path string) (*git.Repository, billy.Filesystem, error) {
+	fs, err := osfs.New(c.BasePath).Chroot(path)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// TODO: this probably shouldn't be memfs.
+	worktree := memfs.New()
+
+	repoFS := filesystem.NewStorage(fs, cache.NewObjectLRUDefault())
+
+	repo, err := git.Open(repoFS, worktree)
+	// If we explicitly got a NotExists error, we should init the repo
+	if err == git.ErrRepositoryNotExists {
+		// Init the repo without a worktree.
+		repo, err = git.Init(repoFS, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// Try again to open the repo now that it exists, using a separate
+		// worktree fs.
+		repo, err = git.Open(repoFS, worktree)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return repo, worktree, nil
 }
