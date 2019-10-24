@@ -3,14 +3,45 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os/exec"
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/gliderlabs/ssh"
 	"github.com/rs/zerolog"
+	"gopkg.in/src-d/go-billy.v4"
+	"gopkg.in/src-d/go-git.v4/plumbing/object"
 )
+
+func readFile(fs billy.Filesystem, filename string) ([]byte, error) {
+	f, err := fs.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	return ioutil.ReadAll(f)
+}
+
+func createFile(fs billy.Filesystem, filename string, data []byte) error {
+	f, err := fs.Create(filename)
+	if err != nil {
+		return err
+	}
+
+	_, err = f.Write(data)
+	return err
+}
+
+func newAdminGitSignature() *object.Signature {
+	return &object.Signature{
+		Name:  "root",
+		Email: "root@localhost",
+		When:  time.Now(),
+	}
+}
 
 func expandGroups(groups map[string][]string, users []string) []string {
 	out := []string{}

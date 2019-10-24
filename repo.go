@@ -113,7 +113,7 @@ func (serv *server) LookupRepo(repoPath string, u *User, access accessType) (*Re
 		return nil, errors.New("Permission denied")
 	}
 
-	_, err = EnsureRepo(lookup.Path)
+	_, _, err = serv.c.EnsureRepo(lookup.Path)
 	if err != nil {
 		return nil, err
 	}

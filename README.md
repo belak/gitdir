@@ -17,11 +17,9 @@ should be fairly simple to migrate to or from other git hosting solutions.
 Build requirements:
 
 - Go 1.13
-- libgit2 0.28
 
 Runtime requirements:
 
-- libgit2 0.28
 - git
 
 ## Building
@@ -32,7 +30,7 @@ From the root of the source tree, run:
 go build
 ```
 
-This will create a binary called go-git-dir.
+This will create a binary called go-gitdir.
 
 ## Running
 
@@ -81,7 +79,7 @@ Note that you will also need to add a user. The following command is a
 convenience for adding a user to the admin config.
 
 ```
-$ go-git-dir --base-dir=/tmp/git add-user --username=belak --pubkey=$HOME/.ssh/id_rsa.pub
+$ go-gitdir --base-dir=/tmp/git add-user --username=belak --pubkey=$HOME/.ssh/id_rsa.pub
 ```
 
 Note that you will need to manually clone the admin repository (at
