@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os/exec"
 	"strings"
 	"sync"
@@ -12,28 +11,8 @@ import (
 
 	"github.com/gliderlabs/ssh"
 	"github.com/rs/zerolog"
-	"gopkg.in/src-d/go-billy.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
 )
-
-func readFile(fs billy.Filesystem, filename string) ([]byte, error) {
-	f, err := fs.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	return ioutil.ReadAll(f)
-}
-
-func createFile(fs billy.Filesystem, filename string, data []byte) error {
-	f, err := fs.Create(filename)
-	if err != nil {
-		return err
-	}
-
-	_, err = f.Write(data)
-	return err
-}
 
 func newAdminGitSignature() *object.Signature {
 	return &object.Signature{
@@ -62,7 +41,7 @@ func groupMembers(groups map[string][]string, groupName string, groupPath []stri
 	out := []string{}
 
 	if listContains(groupPath, groupName) {
-		return nil, fmt.Errorf("Found group loop: %s", strings.Join(groupPath, ", "))
+		return nil, fmt.Errorf("found group loop: %s", strings.Join(groupPath, ", "))
 	}
 
 	groupPath = append(groupPath, groupName)
@@ -151,6 +130,7 @@ func sanitize(in string) string {
 
 func runCommand(log *zerolog.Logger, session ssh.Session, args []string) int {
 	cmd := exec.Command(args[0], args[1:]...)
+
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get stdin pipe")

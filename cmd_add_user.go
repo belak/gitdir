@@ -1,12 +1,11 @@
 package main
 
 import (
-	"errors"
+	"crypto/sha256"
+	"fmt"
 
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli"
-	git "gopkg.in/src-d/go-git.v4"
-	"gopkg.in/src-d/go-git.v4/plumbing"
 	yaml "gopkg.in/yaml.v3"
 )
 
@@ -21,74 +20,13 @@ func addUserFlags() []cli.Flag {
 			Name:     "pubkey",
 			Required: true,
 			Usage:    "File name of a public key to add",
-			Value:    &publicKey{},
+			Value:    &PublicKey{},
 		},
 		cli.BoolFlag{
 			Name:  "admin",
 			Usage: "Give the user admin access",
 		},
 	}
-}
-
-func yamlLookupKey(n *yaml.Node, key string) *yaml.Node {
-	for i := 0; i+1 < len(n.Content); i += 2 {
-		if n.Content[i].Kind == yaml.ScalarNode && n.Content[i].Value == key {
-			return n.Content[i+1]
-		}
-	}
-
-	return nil
-}
-
-func ensureAdmin(targetNode *yaml.Node, val bool) {
-	// We only want to set the value if it's true
-	if !val {
-		return
-	}
-
-	adminValue := yamlLookupKey(targetNode, "is_admin")
-
-	newNode := &yaml.Node{
-		Kind:  yaml.ScalarNode,
-		Tag:   "!!bool",
-		Value: "true",
-	}
-
-	if adminValue == nil {
-		targetNode.Content = append(
-			targetNode.Content,
-			&yaml.Node{
-				Kind:  yaml.ScalarNode,
-				Value: "is_admin",
-			},
-			newNode,
-		)
-	} else {
-		*adminValue = *newNode
-	}
-}
-
-func ensureKey(targetNode *yaml.Node, val *publicKey) {
-	keysValue := yamlLookupKey(targetNode, "keys")
-
-	if keysValue == nil {
-		keysValue = &yaml.Node{
-			Kind: yaml.SequenceNode,
-		}
-		targetNode.Content = append(
-			targetNode.Content,
-			&yaml.Node{
-				Kind:  yaml.ScalarNode,
-				Value: "keys",
-			},
-			keysValue,
-		)
-	}
-
-	keysValue.Content = append(keysValue.Content, &yaml.Node{
-		Kind:  yaml.ScalarNode,
-		Value: val.MarshalAuthorizedKey(),
-	})
 }
 
 func cmdAddUser(c *cli.Context) error {
@@ -98,85 +36,58 @@ func cmdAddUser(c *cli.Context) error {
 	}
 
 	username := c.String("username")
-	pubkey := c.Generic("pubkey").(*publicKey)
+	pubkey := c.Generic("pubkey").(*PublicKey)
 	admin := c.Bool("admin")
 
-	repo, worktreeFS, err := config.EnsureRepo("admin/admin")
+	adminRepo, err := config.EnsureRepo("admin/admin", true)
 	if err != nil {
 		return err
 	}
 
-	worktree, err := repo.Worktree()
+	userRepo, err := config.EnsureRepo("admin/user-"+username, true)
 	if err != nil {
 		return err
 	}
 
-	err = worktree.Checkout(&git.CheckoutOptions{
-		Force: true,
-	})
-	if err != nil && err != plumbing.ErrReferenceNotFound {
+	// We want to use RawMarshal here so the comment isn't included.
+	sum := sha256.Sum256([]byte(pubkey.RawMarshalAuthorizedKey()))
+
+	err = userRepo.CreateFile(fmt.Sprintf("keys/%x.pub", sum), []byte(pubkey.MarshalAuthorizedKey()))
+	if err != nil {
 		return err
 	}
 
-	filename := "users/" + username + ".yml"
-
-	data, err := readFile(worktreeFS, filename)
+	err = userRepo.Commit("Added key", nil)
 	if err != nil {
-		log.Warn().Str("filename", filename).Err(err).Msg("File missing")
+		return err
 	}
 
-	rootNode := &yaml.Node{
-		Kind: yaml.DocumentNode,
-	}
+	if admin {
+		err = adminRepo.UpdateFile("config.yml", func(data []byte) ([]byte, error) {
+			rootNode, targetNode, err := yamlEnsureDocument(data)
+			if err != nil {
+				return nil, err
+			}
 
-	// We explicitly ignore this error so we can manually make a tree
-	_ = yaml.Unmarshal(data, rootNode)
+			// Find the user and add is_admin on
+			usersValue := yamlLookupKey(targetNode, "users")
+			userValue := yamlLookupKey(usersValue, username)
+			yamlEnsureKey(userValue, "is_admin", &yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Tag:   "!!bool",
+				Value: "true",
+			})
 
-	if len(rootNode.Content) == 0 {
-		rootNode.Content = append(rootNode.Content, &yaml.Node{
-			Kind: yaml.MappingNode,
+			return yaml.Marshal(rootNode)
 		})
-	}
+		if err != nil {
+			return err
+		}
 
-	if len(rootNode.Content) != 1 || rootNode.Content[0].Kind != yaml.MappingNode {
-		return errors.New("Root is not a valid yaml document")
-	}
-
-	targetNode := rootNode.Content[0]
-
-	ensureAdmin(targetNode, admin)
-	ensureKey(targetNode, pubkey)
-
-	out, err := yaml.Marshal(rootNode)
-	if err != nil {
-		return err
-	}
-
-	f, err := worktreeFS.Create(filename)
-	if err != nil {
-		return err
-	}
-
-	_, err = f.Write(out)
-	if err != nil {
-		return err
-	}
-
-	err = f.Close()
-	if err != nil {
-		return err
-	}
-
-	_, err = worktree.Add(filename)
-	if err != nil {
-		return err
-	}
-
-	_, err = worktree.Commit("Added key to "+username, &git.CommitOptions{
-		Author: newAdminGitSignature(),
-	})
-	if err != nil {
-		return err
+		err = userRepo.Commit("Set "+username+" to admin", nil)
+		if err != nil {
+			return err
+		}
 	}
 
 	log.Info().Msg("Success!")

@@ -8,33 +8,38 @@ import (
 
 var repoTestCases = []struct {
 	In     string
-	Type   RepoType
+	Type   RepoLookup
 	Path   string
 	Errors bool
 }{
 	{
 		In:   "admin",
-		Type: RepoTypeAdmin,
+		Type: &repoLookupAdmin{},
 		Path: "admin/admin",
 	},
 	{
+		In:   "top-level",
+		Type: &repoLookupTopLevel{},
+		Path: "top-level/top-level",
+	},
+	{
 		In:   "@org",
-		Type: RepoTypeOrgConfig,
+		Type: &repoLookupOrgConfig{},
 		Path: "admin/org-org",
 	},
 	{
 		In:   "@org/repo",
-		Type: RepoTypeOrg,
+		Type: &repoLookupOrg{},
 		Path: "orgs/org/repo",
 	},
 	{
 		In:   "~user",
-		Type: RepoTypeUserConfig,
+		Type: &repoLookupUserConfig{},
 		Path: "admin/user-user",
 	},
 	{
 		In:   "~user/repo",
-		Type: RepoTypeUser,
+		Type: &repoLookupUser{},
 		Path: "users/user/repo",
 	},
 }
@@ -50,8 +55,7 @@ func TestParseRepo(t *testing.T) {
 		}
 
 		assert.NoError(t, err)
-
-		assert.Equal(t, testCase.Type, lookup.Type)
-		assert.Equal(t, testCase.Path, lookup.Path)
+		assert.IsType(t, testCase.Type, lookup)
+		assert.Equal(t, testCase.Path, lookup.Path())
 	}
 }

@@ -1,29 +1,33 @@
 package main
 
 import (
+	"sync"
+
 	"github.com/gliderlabs/ssh"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	extEd25519 "golang.org/x/crypto/ed25519"
 	gossh "golang.org/x/crypto/ssh"
 )
 
-type server struct {
-	s   *ssh.Server
+type Server struct {
+	lock *sync.RWMutex
+	s    *ssh.Server
+	c    *Config
+
+	// Server level logger
 	log zerolog.Logger
-	c   *Config
 
-	repo *AdminRepo
-
-	sshCommands map[string]sshCommand
+	// This represents the internal state of the server.
+	settings *AdminConfig
 }
 
-func newServer(c *Config) (*server, error) {
+func NewServer(c *Config) (*Server, error) {
 	var err error
 
-	serv := &server{
-		log: log.Logger,
-		c:   c,
+	serv := &Server{
+		lock: &sync.RWMutex{},
+		log:  log.Logger,
+		c:    c,
 	}
 
 	serv.s = &ssh.Server{
@@ -32,19 +36,8 @@ func newServer(c *Config) (*server, error) {
 		PublicKeyHandler: serv.handlePublicKey,
 	}
 
-	// Set up a mapping of what ssh commands call what functions.
-	serv.sshCommands = map[string]sshCommand{
-		"whoami":           cmdWhoami,
-		"git-receive-pack": serv.cmdRepoAction(accessTypeWrite),
-		"git-upload-pack":  serv.cmdRepoAction(accessTypeRead),
-	}
-
-	serv.repo, err = c.OpenAdminRepo()
-	if err != nil {
-		return nil, err
-	}
-
-	err = serv.reloadInternal()
+	// This will set serv.settings
+	err = serv.Reload()
 	if err != nil {
 		return nil, err
 	}
@@ -52,57 +45,58 @@ func newServer(c *Config) (*server, error) {
 	return serv, nil
 }
 
-func (serv *server) Reload() error {
-	err := serv.repo.Reload()
-	if err != nil {
-		return err
-	}
+func (serv *Server) GetAdminConfig() *AdminConfig {
+	serv.lock.RLock()
+	defer serv.lock.RUnlock()
 
-	return serv.reloadInternal()
+	return serv.settings
 }
 
-func (serv *server) reloadInternal() error {
-	keys, err := serv.repo.GetServerKeys()
+func (serv *Server) Reload() error {
+	var err error
+
+	serv.lock.Lock()
+	defer serv.lock.Unlock()
+
+	var pks []PrivateKey
+	serv.settings, pks, err = serv.c.LoadSettings()
 	if err != nil {
 		return err
 	}
 
-	rsaSigner, err := gossh.NewSignerFromSigner(keys.RSA)
-	if err != nil {
-		return err
+	for _, key := range pks {
+		signer, err := gossh.NewSignerFromSigner(key)
+		if err != nil {
+			return err
+		}
+		serv.s.AddHostKey(signer)
 	}
-
-	// There are some oddities with how keys are handled here. Because ed25519
-	// was a separate package for a while and that's what the ssh package
-	// depends on, we need to use that, even though it's just a type alias as of
-	// Go 1.13 anyway.
-	ed25519Key := extEd25519.PrivateKey(keys.Ed25519)
-	ed25519Signer, err := gossh.NewSignerFromSigner(ed25519Key)
-	if err != nil {
-		return err
-	}
-
-	// Add the loaded keys to the server
-	serv.s.AddHostKey(rsaSigner)
-	serv.s.AddHostKey(ed25519Signer)
 
 	return nil
 }
 
-func (serv *server) ListenAndServe() error {
+func (serv *Server) ListenAndServe() error {
 	serv.log.Info().Str("port", serv.c.BindAddr).Msg("Starting SSH server")
 
 	return serv.s.ListenAndServe()
 }
 
-func (serv *server) handlePublicKey(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
+func (serv *Server) handlePublicKey(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
 	slog := CtxLogger(ctx).With().
 		Str("remote_user", ctx.User()).
 		Str("remote_addr", ctx.RemoteAddr().String()).Logger()
 
+	// Pull the admin config so we can use it when we need it. This will serve
+	// as an anchor point, so if the server reloads, we need to keep the old
+	// config in place.
+	//
+	// NOTE: if the user has a long-lived connection and the settings change out
+	// from under the user, the connection should be cycled.
+	settings := serv.GetAdminConfig()
+
 	remoteUser := ctx.User()
 
-	user, err := serv.repo.GetUserFromKey(incomingKey)
+	user, err := settings.GetUserFromKey(PublicKey{incomingKey, ""})
 	if err != nil {
 		slog.Warn().Err(err).Msg("User not found")
 		return false
@@ -114,14 +108,18 @@ func (serv *server) handlePublicKey(ctx ssh.Context, incomingKey ssh.PublicKey) 
 		return false
 	}
 
+	// Update the context with what we discovered
 	CtxSetUser(ctx, user)
-	CtxSetConfig(ctx, serv.c)
+	CtxSetSettings(ctx, settings)
 	CtxSetLogger(ctx, &slog)
+
+	// Config will never change, so we can pull this directly from the server.
+	CtxSetConfig(ctx, serv.c)
 
 	return true
 }
 
-func (serv *server) handleSession(s ssh.Session) {
+func (serv *Server) handleSession(s ssh.Session) {
 	ctx := s.Context()
 
 	// Pull a logger for the session
@@ -139,25 +137,39 @@ func (serv *server) handleSession(s ssh.Session) {
 
 	cmd := s.Command()
 
-	// If the user doesn't provide any arguments, we want to run the
-	// internal whoami command.
+	// If the user doesn't provide any arguments, we want to run the internal
+	// whoami command.
 	if len(cmd) == 0 {
 		cmd = []string{"whoami"}
 	}
 
+	// Add the command to the logger
 	tmpLog := slog.With().Str("cmd", cmd[0]).Logger()
 	slog = &tmpLog
 	ctx = WithLogger(ctx, slog)
 
 	var exit int
-	if cb := serv.sshCommands[cmd[0]]; cb != nil {
-		slog.Info().Msg("Running command")
-		exit = cb(ctx, s, cmd)
-	} else {
-		slog.Info().Msg("Command not found")
+
+	switch cmd[0] {
+	case "whoami":
+		exit = cmdWhoami(ctx, s, cmd)
+	case "git-receive-pack":
+		exit = serv.cmdRepoAction(ctx, s, cmd, AccessTypeWrite)
+	case "git-upload-pack":
+		exit = serv.cmdRepoAction(ctx, s, cmd, AccessTypeRead)
+	default:
 		exit = cmdNotFound(ctx, s, cmd)
 	}
 
 	slog.Info().Int("return_code", exit).Msg("Return code")
 	_ = s.Exit(exit)
+}
+
+func (c *Config) LookupRepo(repoPath string) (RepoLookup, error) {
+	lookup, err := ParseRepo(c, repoPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return lookup, nil
 }

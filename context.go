@@ -15,13 +15,14 @@ func (c contextKey) String() string {
 }
 
 const (
-	contextKeyUser   = contextKey("go-git-dir-user")
-	contextKeyConfig = contextKey("go-git-dir-config")
-	contextKeyLogger = contextKey("go-git-dir-logger")
+	contextKeyUser          = contextKey("go-git-dir-user")
+	contextKeyConfig        = contextKey("go-git-dir-config")
+	contextKeyLogger        = contextKey("go-git-dir-logger")
+	contextKeyAdminSettings = contextKey("go-git-dir-admin-settings")
 )
 
-func CtxExtract(ctx context.Context) (*zerolog.Logger, *Config, *User) {
-	return CtxLogger(ctx), CtxConfig(ctx), CtxUser(ctx)
+func CtxExtract(ctx context.Context) (*zerolog.Logger, *Config, *AdminConfig, *User) {
+	return CtxLogger(ctx), CtxConfig(ctx), CtxSettings(ctx), CtxUser(ctx)
 }
 
 func CtxSetUser(parent ssh.Context, user *User) {
@@ -34,6 +35,19 @@ func CtxUser(ctx context.Context) *User {
 	}
 
 	return AnonymousUser
+}
+
+func CtxSetSettings(parent ssh.Context, a *AdminConfig) {
+	parent.SetValue(contextKeyAdminSettings, a)
+}
+
+func CtxSettings(ctx context.Context) *AdminConfig {
+	if s, ok := ctx.Value(contextKeyAdminSettings).(*AdminConfig); ok {
+		return s
+	}
+
+	// A default config should be empty and disallow all access.
+	return &AdminConfig{}
 }
 
 func WithLogger(parent context.Context, logger *zerolog.Logger) context.Context {
