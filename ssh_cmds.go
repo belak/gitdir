@@ -9,8 +9,6 @@ import (
 	"github.com/gliderlabs/ssh"
 )
 
-type sshCommand func(ctx context.Context, s ssh.Session, cmd []string) int
-
 func cmdWhoami(ctx context.Context, s ssh.Session, cmd []string) int {
 	user := CtxUser(ctx)
 	_ = writeStringFmt(s, "logged in as %s\r\n", user.Username)
@@ -22,39 +20,50 @@ func cmdNotFound(ctx context.Context, s ssh.Session, cmd []string) int {
 	return 1
 }
 
-func (serv *server) cmdRepoAction(access accessType) sshCommand {
-	return func(ctx context.Context, s ssh.Session, cmd []string) int {
-		if len(cmd) != 2 {
-			_ = writeStringFmt(s.Stderr(), "Missing repo name argument")
-			return 1
-		}
+// TODO: don't bother currying here
+func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []string, access AccessType) int {
+	if len(cmd) != 2 {
+		_ = writeStringFmt(s.Stderr(), "Missing repo name argument")
+		return 1
+	}
 
-		log, _, user := CtxExtract(ctx)
+	log, config, settings, user := CtxExtract(ctx)
 
-		// Sanitize the repo name
-		//   - Trim all slashes from beginning and end
-		//   - Add a root slash (so path.Clean works correctly)
-		//   - path.Clean
-		//   - Remove the initial slash
-		//   - Sanitize the name
-		repoName := sanitize(path.Clean("/" + strings.Trim(cmd[1], "/"))[1:])
+	// Sanitize the repo name
+	//   - Trim all slashes from beginning and end
+	//   - Add a root slash (so path.Clean works correctly)
+	//   - path.Clean
+	//   - Remove the initial slash
+	//   - Sanitize the name
+	repoName := sanitize(path.Clean("/" + strings.Trim(cmd[1], "/"))[1:])
 
-		repo, err := serv.LookupRepo(repoName, user, access)
-		if err != nil {
-			return -1
-		}
+	repo, err := config.LookupRepo(repoName)
+	if err != nil {
+		return -1
+	}
 
-		returnCode := runCommand(log, s, []string{cmd[0], filepath.FromSlash(repo.Path)})
+	if !repo.IsValid(settings) {
+		_ = writeStringFmt(s.Stderr(), "Repo does not exist")
+		return -1
+	}
 
-		switch repo.Type {
-		case RepoTypeAdmin, RepoTypeOrgConfig, RepoTypeUserConfig:
-			// TODO: show error
+	if !repo.UserHasAccess(settings, user, access) {
+		_ = writeStringFmt(s.Stderr(), "Permission denied")
+		return -1
+	}
+
+	returnCode := runCommand(log, s, []string{cmd[0], filepath.FromSlash(repo.Path())})
+
+	// Reload the server config if a config repo was changed.
+	if access == AccessTypeWrite {
+		switch repo.(type) {
+		case *repoLookupAdmin, *repoLookupOrgConfig, *repoLookupUserConfig:
 			err = serv.Reload()
 			if err != nil {
-				return -1
+				_ = writeStringFmt(s.Stderr(), "Error when reloading config: %s", err)
 			}
 		}
-
-		return returnCode
 	}
+
+	return returnCode
 }

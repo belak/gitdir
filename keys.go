@@ -1,11 +1,13 @@
 package main
 
 import (
+	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"io/ioutil"
 	"strings"
 
@@ -13,13 +15,13 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
-type publicKey struct {
+type PublicKey struct {
 	ssh.PublicKey
 	comment string
 }
 
-// Implement loading from a file
-func (pk *publicKey) Set(value string) error {
+// Implement loading from a file. This is used by the cli package.
+func (pk *PublicKey) Set(value string) error {
 	var err error
 
 	rawData, err := ioutil.ReadFile(value)
@@ -35,23 +37,29 @@ func (pk *publicKey) Set(value string) error {
 	return nil
 }
 
-func (pk *publicKey) MarshalAuthorizedKey() string {
+// TODO: convert to []byte
+func (pk *PublicKey) RawMarshalAuthorizedKey() string {
 	if pk == nil || pk.PublicKey == nil {
 		return ""
 	}
-	key := strings.TrimSpace(string(gossh.MarshalAuthorizedKey(pk)))
+	return strings.TrimSpace(string(gossh.MarshalAuthorizedKey(pk)))
+}
+
+func (pk *PublicKey) MarshalAuthorizedKey() string {
+	key := pk.RawMarshalAuthorizedKey()
 	if pk.comment != "" {
 		return key + " " + pk.comment
 	}
 	return key
 }
 
-func (pk *publicKey) String() string {
+// String makes it much easier to support yaml
+func (pk *PublicKey) String() string {
 	return pk.MarshalAuthorizedKey()
 }
 
 // Implement loading from yaml files
-func (pk *publicKey) UnmarshalYAML(unmarshal func(v interface{}) error) error {
+func (pk *PublicKey) UnmarshalYAML(unmarshal func(v interface{}) error) error {
 	var rawData string
 	err := unmarshal(&rawData)
 	if err != nil {
@@ -66,18 +74,42 @@ func (pk *publicKey) UnmarshalYAML(unmarshal func(v interface{}) error) error {
 	return nil
 }
 
-func generateEd25519Key() (ed25519.PrivateKey, error) {
+type PrivateKey interface {
+	crypto.Signer
+
+	MarshalPrivateKey() ([]byte, error)
+}
+
+type ed25519PrivateKey struct {
+	ed25519.PrivateKey
+}
+
+func ParseEd25519Key(data []byte) (PrivateKey, error) {
+	privateKey, err := gossh.ParseRawPrivateKey(data)
+	if err != nil {
+		return nil, err
+	}
+
+	ed25519Key, ok := privateKey.(ed25519.PrivateKey)
+	if !ok {
+		return nil, errors.New("id_ed25519 not an RSA key")
+	}
+
+	return &ed25519PrivateKey{ed25519Key}, nil
+}
+
+func GenerateEd25519Key() (PrivateKey, error) {
 	_, pk, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
 
-	return pk, err
+	return &ed25519PrivateKey{pk}, err
 }
 
-func marshalEd25519Key(pk ed25519.PrivateKey) ([]byte, error) {
+func (pk *ed25519PrivateKey) MarshalPrivateKey() ([]byte, error) {
 	// Get ASN.1 DER format
-	privDER, err := x509.MarshalPKCS8PrivateKey(pk)
+	privDER, err := x509.MarshalPKCS8PrivateKey(pk.PrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +127,25 @@ func marshalEd25519Key(pk ed25519.PrivateKey) ([]byte, error) {
 	return privatePEM, nil
 }
 
-func generateRSAKey() (*rsa.PrivateKey, error) {
+type rsaPrivateKey struct {
+	*rsa.PrivateKey
+}
+
+func ParseRSAKey(data []byte) (PrivateKey, error) {
+	privateKey, err := gossh.ParseRawPrivateKey(data)
+	if err != nil {
+		return nil, err
+	}
+
+	rsaKey, ok := privateKey.(*rsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("not an RSA key")
+	}
+
+	return &rsaPrivateKey{rsaKey}, nil
+}
+
+func GenerateRSAKey() (PrivateKey, error) {
 	// Private Key generation
 	privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
@@ -108,12 +158,12 @@ func generateRSAKey() (*rsa.PrivateKey, error) {
 		return nil, err
 	}
 
-	return privateKey, nil
+	return &rsaPrivateKey{privateKey}, nil
 }
 
-func marshalRSAKey(pk *rsa.PrivateKey) []byte {
+func (pk *rsaPrivateKey) MarshalPrivateKey() ([]byte, error) {
 	// Get ASN.1 DER format
-	privDER := x509.MarshalPKCS1PrivateKey(pk)
+	privDER := x509.MarshalPKCS1PrivateKey(pk.PrivateKey)
 
 	// pem.Block
 	privBlock := pem.Block{
@@ -125,5 +175,5 @@ func marshalRSAKey(pk *rsa.PrivateKey) []byte {
 	// Private key in PEM format
 	privatePEM := pem.EncodeToMemory(&privBlock)
 
-	return privatePEM
+	return privatePEM, nil
 }

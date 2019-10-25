@@ -2,181 +2,71 @@ package main
 
 import (
 	"errors"
-	"path"
 	"strings"
 )
 
-type RepoType int
+type AccessType int
 
 const (
-	// panic()
-	RepoTypeUnknown RepoType = iota
-	// admin
-	RepoTypeAdmin
-	// repo
-	RepoTypeTopLevel
-	// ~user
-	RepoTypeUserConfig
-	// ~user/repo
-	RepoTypeUser
-	// @org
-	RepoTypeOrgConfig
-	// @org/repo
-	RepoTypeOrg
+	AccessTypeRead AccessType = iota
+	AccessTypeWrite
 )
 
-// RepoLookup represents a repo query. This is a simple type used to
-type RepoLookup struct {
-	Type RepoType
-	Dir  string
-	Name string
-	Path string
-}
+var ErrInvalidRepoFormat = errors.New("invalid repo format")
 
-func ParseRepo(c *Config, pathname string) (*RepoLookup, error) {
-	r, err := parseRepoInternal(c, pathname)
-	if err != nil {
-		return nil, err
+func ParseRepo(c *Config, pathname string) (RepoLookup, error) {
+	if pathname == "admin" {
+		return &repoLookupAdmin{}, nil
 	}
 
-	r.Path, err = r.buildPath(c)
-	if err != nil {
-		return nil, err
+	if strings.HasPrefix(pathname, c.OrgPrefix) {
+		// Strip off the org prefix and continue parsing
+		pathname = pathname[len(c.OrgPrefix):]
+
+		path := strings.Split(pathname, "/")
+		if len(path) == 1 {
+			return &repoLookupOrgConfig{
+				Org: path[0],
+			}, nil
+		}
+
+		if len(path) == 2 {
+			return &repoLookupOrg{
+				Org:  path[0],
+				Name: path[1],
+			}, nil
+		}
+
+		return nil, ErrInvalidRepoFormat
 	}
 
-	return r, nil
-}
+	if strings.HasPrefix(pathname, c.UserPrefix) {
+		// Strip off the org prefix and continue parsing
+		pathname = pathname[len(c.UserPrefix):]
 
-func parseRepoInternal(c *Config, pathname string) (*RepoLookup, error) {
-	r := &RepoLookup{
-		Type: RepoTypeUnknown,
+		path := strings.Split(pathname, "/")
+		if len(path) == 1 {
+			return &repoLookupUserConfig{
+				User: path[0],
+			}, nil
+		}
+
+		if len(path) == 2 {
+			return &repoLookupUser{
+				User: path[0],
+				Name: path[1],
+			}, nil
+		}
+
+		return nil, ErrInvalidRepoFormat
 	}
 
 	path := strings.Split(pathname, "/")
-
-	// All config types are technically in the root dir
 	if len(path) == 1 {
-		dir := path[0]
-		if path[0] == "admin" {
-			r.Type = RepoTypeAdmin
-		} else if strings.HasPrefix(dir, c.UserPrefix) {
-			r.Type = RepoTypeUserConfig
-			r.Name = dir[len(c.UserPrefix):]
-		} else if strings.HasPrefix(path[0], c.OrgPrefix) {
-			r.Type = RepoTypeOrgConfig
-			r.Name = dir[len(c.OrgPrefix):]
-		} else {
-			r.Type = RepoTypeTopLevel
-			r.Name = dir
-		}
-		return r, nil
+		return &repoLookupTopLevel{
+			Name: path[0],
+		}, nil
 	}
 
-	if len(path) != 2 {
-		return nil, errors.New("Invalid repo format")
-	}
-
-	dir := path[0]
-	name := path[1]
-
-	if strings.HasPrefix(dir, c.UserPrefix) {
-		r.Type = RepoTypeUser
-		r.Dir = dir[len(c.UserPrefix):]
-		r.Name = name
-		return r, nil
-	}
-
-	if strings.HasPrefix(dir, c.OrgPrefix) {
-		r.Type = RepoTypeOrg
-		r.Dir = dir[len(c.OrgPrefix):]
-		r.Name = name
-		return r, nil
-	}
-
-	return nil, errors.New("Invalid repo format")
-}
-
-func (serv *server) LookupRepo(repoPath string, u *User, access accessType) (*RepoLookup, error) {
-	serv.repo.RLock()
-	defer serv.repo.RUnlock()
-
-	lookup, err := ParseRepo(serv.c, repoPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if !serv.repo.lookupIsValid(lookup) {
-		return nil, errors.New("Repo does not exist")
-	}
-
-	if !serv.repo.settings.UserHasRepoAccess(u, lookup, access) {
-		return nil, errors.New("Permission denied")
-	}
-
-	_, _, err = serv.c.EnsureRepo(lookup.Path)
-	if err != nil {
-		return nil, err
-	}
-
-	return lookup, nil
-}
-
-func (a *AdminRepo) lookupIsValid(r *RepoLookup) bool {
-	switch r.Type {
-	case RepoTypeAdmin:
-		// An admin repo is always valid
-		return true
-	case RepoTypeTopLevel:
-		// A top level repo is valid if the repo is defined.
-		_, ok := a.settings.Repos[r.Name]
-		return ok
-	case RepoTypeUserConfig:
-		// A user config repo is valid if the user is defined.
-		_, ok := a.users[r.Name]
-		return ok
-	case RepoTypeUser:
-		// User repos are valid if user repos are enabled and the user is defined.
-		if !a.settings.Options.UserRepos {
-			return false
-		}
-		// TODO: users should be able to define these in their user config
-		_, ok := a.users[r.Dir]
-		return ok
-	case RepoTypeOrgConfig:
-		// An org config repo is valid if the org is defined.
-		_, ok := a.settings.Orgs[r.Name]
-		return ok
-	case RepoTypeOrg:
-		// An org config repo is valid if the org  isdefined and the org repo is
-		// defined.
-		org, ok := a.settings.Orgs[r.Dir]
-		if !ok {
-			return false
-		}
-		// TODO: org admins should be able to define these in their org config
-		_, ok = org.Repos[r.Name]
-		return ok
-	default:
-		return false
-	}
-}
-
-func (r RepoLookup) buildPath(c *Config) (string, error) {
-	switch r.Type {
-	case RepoTypeAdmin:
-		// Admin repo is a static path
-		return path.Join(c.BasePath, "admin", "admin"), nil
-	case RepoTypeTopLevel:
-		return path.Join(c.BasePath, "top-level", r.Name), nil
-	case RepoTypeUserConfig:
-		return path.Join(c.BasePath, "admin", "user-"+r.Name), nil
-	case RepoTypeUser:
-		return path.Join(c.BasePath, "users", r.Dir, r.Name), nil
-	case RepoTypeOrgConfig:
-		return path.Join(c.BasePath, "admin", "org-"+r.Name), nil
-	case RepoTypeOrg:
-		return path.Join(c.BasePath, "orgs", r.Dir, r.Name), nil
-	}
-
-	return "", errors.New("Unsupported repo type")
+	return nil, ErrInvalidRepoFormat
 }

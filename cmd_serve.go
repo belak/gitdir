@@ -1,30 +1,21 @@
 package main
 
 import (
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli"
 )
 
 func cmdServe(c *cli.Context) error {
-	// Load config first so we know how to set the logger
+	// Load config first so it works with the logger.
 	config, err := NewCLIConfig(c)
-
-	// Set up the logger
-	if config.LogReadable {
-		log.Logger = zerolog.New(zerolog.NewConsoleWriter()).With().Timestamp().Logger()
-	}
-	if config.LogDebug {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	}
 
 	log.Info().Msg("Starting go-git-dir")
 
 	if err != nil {
-		log.Fatal().Err(err).Msg("Error loading environment config")
+		log.Fatal().Err(err).Msg("Error loading core config")
 	}
 
-	serv, err := newServer(config)
+	serv, err := NewServer(config)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to load SSH server")
 	}

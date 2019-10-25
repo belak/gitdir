@@ -1,16 +1,11 @@
 package main
 
 import (
-	"errors"
 	"os"
 
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli"
-	"gopkg.in/src-d/go-billy.v4"
-	"gopkg.in/src-d/go-billy.v4/memfs"
-	"gopkg.in/src-d/go-billy.v4/osfs"
-	git "gopkg.in/src-d/go-git.v4"
-	"gopkg.in/src-d/go-git.v4/plumbing/cache"
-	"gopkg.in/src-d/go-git.v4/storage/filesystem"
 )
 
 // There are two places things can be configured. Environment variables are
@@ -30,16 +25,6 @@ type Config struct {
 
 	LogReadable bool
 	LogDebug    bool
-}
-
-func validateConfig(c *Config) error {
-	if info, err := os.Stat(c.BasePath); os.IsNotExist(err) {
-		return errors.New("GITDIR_BASE_DIR does not exist")
-	} else if !info.IsDir() {
-		return errors.New("GITDIR_BASE_DIR is not a directory")
-	}
-
-	return nil
 }
 
 func cliFlags() []cli.Flag {
@@ -93,7 +78,20 @@ func NewCLIConfig(ctx *cli.Context) (*Config, error) {
 	c.UserPrefix = ctx.GlobalString("user-prefix")
 	c.OrgPrefix = ctx.GlobalString("org-prefix")
 
-	return c, validateConfig(c)
+	// Set up the logger
+	if c.LogReadable {
+		log.Logger = zerolog.New(zerolog.NewConsoleWriter()).With().Timestamp().Logger()
+	}
+	if c.LogDebug {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+
+	err := os.Chdir(c.BasePath)
+	if err != nil {
+		return c, err
+	}
+
+	return c, nil
 }
 
 // NewDefaultConfig returns the base config.
@@ -105,37 +103,4 @@ func NewDefaultConfig() *Config {
 		UserPrefix: "~",
 		OrgPrefix:  "@",
 	}
-}
-
-// EnsureRepo will open a repository if it exists and try to create it if it
-// doesn't.
-func (c *Config) EnsureRepo(path string) (*git.Repository, billy.Filesystem, error) {
-	fs, err := osfs.New(c.BasePath).Chroot(path)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// TODO: this probably shouldn't be memfs.
-	worktree := memfs.New()
-
-	repoFS := filesystem.NewStorage(fs, cache.NewObjectLRUDefault())
-
-	repo, err := git.Open(repoFS, worktree)
-	// If we explicitly got a NotExists error, we should init the repo
-	if err == git.ErrRepositoryNotExists {
-		// Init the repo without a worktree.
-		repo, err = git.Init(repoFS, nil)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// Try again to open the repo now that it exists, using a separate
-		// worktree fs.
-		repo, err = git.Open(repoFS, worktree)
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return repo, worktree, nil
 }
