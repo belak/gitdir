@@ -57,7 +57,7 @@ options:
   # Allow users to define repos under their user accounts. Note that those
   # repos will be accessible at ~username/repo rather than the more
   # traditional username/repo. The config is located at ~username.
-  user_config: false
+  user_config_repos: false
 
   # Allow users to create user repos or org-admins to create org repos
   # simply by cloning or pushing to them.
