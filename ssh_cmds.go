@@ -52,6 +52,15 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 		return -1
 	}
 
+	// If implicit repos are enabled and the user has write access to this
+	// location, go ahead and create it.
+	if settings.Options.ImplicitRepos && repo.UserHasAccess(settings, user, AccessTypeWrite) {
+		_, err = config.EnsureRepo(repo.Path(), false)
+		if err != nil {
+			return -1
+		}
+	}
+
 	returnCode := runCommand(log, s, []string{cmd[0], filepath.FromSlash(repo.Path())})
 
 	// Reload the server config if a config repo was changed.

@@ -59,8 +59,8 @@ options:
   # traditional username/repo. The config is located at ~username.
   user_config_repos: false
 
-  # Allow users to create user repos or org-admins to create org repos
-  # simply by cloning or pushing to them.
+  # Allow users to create repos simply by cloning or pushing to them as long
+  # as they have write access to that location.
   implicit_repos: false
 
   # Allow config at the org level. Note that if this is allowed, the root config
