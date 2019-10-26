@@ -106,6 +106,12 @@ func (rl repoLookupUser) IsValid(c *AdminConfig) bool {
 		return false
 	}
 
+	// If we allow implicit repos, it doesn't matter if the repo actually
+	// exists.
+	if c.Options.ImplicitRepos {
+		return true
+	}
+
 	_, ok = user.Repos[rl.Name]
 	return ok
 }
@@ -160,6 +166,12 @@ func (rl repoLookupOrg) IsValid(c *AdminConfig) bool {
 	org, ok := c.Orgs[rl.Org]
 	if !ok {
 		return false
+	}
+
+	// If we allow implicit repos, it doesn't matter if the repo actually
+	// exists.
+	if c.Options.ImplicitRepos {
+		return true
 	}
 
 	_, ok = org.Repos[rl.Name]

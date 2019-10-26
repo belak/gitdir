@@ -90,9 +90,9 @@ type OrgConfig struct {
 }
 
 type OptionsConfig struct {
-	// ImplicitRepos allows a user to create user repos or an org-admin to
-	// create org repos simply by cloning or pushing to them.
-	ImplicitRepos bool `yaml:"implicit_repos"` // TODO: implement this
+	// ImplicitRepos allows a user with write access to create repos by simply
+	// cloning or pushing to them.
+	ImplicitRepos bool `yaml:"implicit_repos"`
 
 	// UserConfigRepos allows users to specify repos in their own config, rather
 	// than relying on the main admin config.

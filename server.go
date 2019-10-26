@@ -53,6 +53,8 @@ func (serv *Server) GetAdminConfig() *AdminConfig {
 }
 
 func (serv *Server) Reload() error {
+	log.Info().Msg("Reloading")
+
 	var err error
 
 	serv.lock.Lock()
