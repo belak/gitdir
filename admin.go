@@ -89,15 +89,14 @@ type OrgConfig struct {
 	Repos map[string]RepoConfig
 }
 
-// TODO: implement these
 type OptionsConfig struct {
 	// ImplicitRepos allows a user to create user repos or an org-admin to
 	// create org repos simply by cloning or pushing to them.
-	ImplicitRepos bool `yaml:"implicit_repos"`
+	ImplicitRepos bool `yaml:"implicit_repos"` // TODO: implement this
 
-	// UserConfig allows users to specify repos in their own config, rather than
-	// relying on the main admin config.
-	UserConfig bool `yaml:"user_config"`
+	// UserConfigRepos allows users to specify repos in their own config, rather
+	// than relying on the main admin config.
+	UserConfigRepos bool `yaml:"user_config_repos"`
 
 	// OrgConfig allows org admins to configure orgs in their own config, rather
 	// than relying on the main admin config.
@@ -109,7 +108,7 @@ type OptionsConfig struct {
 
 	// OrgConfigUsers allows org admins to specify users in their own config,
 	// rather than relying on the main admin config.
-	OrgConfigUsers bool `yaml:"org_config_users"`
+	OrgConfigUsers bool `yaml:"org_config_users"` // TODO: implement this
 }
 
 // This is a combination of all the config types we're going to be loading. This
@@ -256,35 +255,44 @@ func (c *Config) LoadSettings() (*AdminConfig, []PrivateKey, error) {
 		}
 
 		if err != nil {
-			// TODO: these should not error out the server
+			log.Warn().Err(err).Str("username", username).Msg("Failed to load user repo")
 			continue
 		}
 
-		// We only really need to merge repos when dealing with loading users,
-		// as we don't want them to be able to set config options.
-		for repoName, repo := range userConfig.Repos {
-			user.Repos[repoName] = MergeRepoConfigs(user.Repos[repoName], repo)
+		if ret.Options.UserConfigRepos {
+			// We only really need to merge repos when dealing with loading users,
+			// as we don't want them to be able to set config options.
+			for repoName, repo := range userConfig.Repos {
+				user.Repos[repoName] = MergeRepoConfigs(user.Repos[repoName], repo)
+			}
 		}
 	}
 
 	// Step 5: Load the org configs from org config repos and merge them with
 	// the root config.
-	tmpOrgs := make(map[string]OrgConfig)
-	for orgName, org := range ret.Orgs {
-		if org.Repos == nil {
-			org.Repos = make(map[string]RepoConfig)
-		}
+	if ret.Options.OrgConfig {
+		tmpOrgs := make(map[string]OrgConfig)
+		for orgName, org := range ret.Orgs {
+			if org.Repos == nil {
+				org.Repos = make(map[string]RepoConfig)
+			}
 
-		orgConfig, err := c.loadOrg(orgName)
-		if err != nil {
-			// TODO: these should not error out the server
-			continue
-		}
+			orgConfig, err := c.loadOrg(orgName)
+			if err != nil {
+				log.Warn().Err(err).Str("org", orgName).Msg("Failed to load org repo")
+				continue
+			}
 
-		tmpOrgs[orgName] = orgConfig
-	}
-	for orgName, org := range tmpOrgs {
-		ret.Orgs[orgName] = MergeOrgConfigs(ret.Orgs[orgName], org)
+			// If they can't load repos from org configs, we need to ignore them
+			if !ret.Options.OrgConfigRepos {
+				orgConfig.Repos = make(map[string]RepoConfig)
+			}
+
+			tmpOrgs[orgName] = orgConfig
+		}
+		for orgName, org := range tmpOrgs {
+			ret.Orgs[orgName] = MergeOrgConfigs(ret.Orgs[orgName], org)
+		}
 	}
 
 	// Step 6: Validation
