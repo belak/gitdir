@@ -23,7 +23,7 @@ func cmdNotFound(ctx context.Context, s ssh.Session, cmd []string) int {
 // TODO: don't bother currying here
 func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []string, access AccessType) int {
 	if len(cmd) != 2 {
-		_ = writeStringFmt(s.Stderr(), "Missing repo name argument")
+		_ = writeStringFmt(s.Stderr(), "Missing repo name argument\r\n")
 		return 1
 	}
 
@@ -43,12 +43,12 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 	}
 
 	if !repo.IsValid(settings) {
-		_ = writeStringFmt(s.Stderr(), "Repo does not exist")
+		_ = writeStringFmt(s.Stderr(), "Repo does not exist\r\n")
 		return -1
 	}
 
 	if !repo.UserHasAccess(settings, user, access) {
-		_ = writeStringFmt(s.Stderr(), "Permission denied")
+		_ = writeStringFmt(s.Stderr(), "Permission denied\r\n")
 		return -1
 	}
 
@@ -70,7 +70,7 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 		case *repoLookupAdmin, *repoLookupOrgConfig, *repoLookupUserConfig:
 			err = serv.Reload()
 			if err != nil {
-				_ = writeStringFmt(s.Stderr(), "Error when reloading config: %s", err)
+				_ = writeStringFmt(s.Stderr(), "Error when reloading config: %s\r\n", err)
 			}
 		}
 	}

@@ -2,8 +2,8 @@ package main
 
 import (
 	"errors"
+	"strings"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/rs/zerolog/log"
 	yaml "gopkg.in/yaml.v3"
 )
@@ -15,18 +15,22 @@ type User struct {
 }
 
 func (ac *AdminConfig) GetUserFromKey(pk PublicKey) (*User, error) {
-	username, ok := ac.PublicKeys[string(pk.Marshal())]
+	usernames, ok := ac.PublicKeys[pk.RawMarshalAuthorizedKey()]
 	if !ok {
 		return AnonymousUser, errors.New("key does not match a user")
 	}
 
-	userConfig, ok := ac.Users[username]
+	if len(usernames) != 1 {
+		return AnonymousUser, errors.New("key matches multiple users")
+	}
+
+	userConfig, ok := ac.Users[usernames[0]]
 	if !ok {
 		return AnonymousUser, errors.New("key does not match a user")
 	}
 
 	return &User{
-		Username:    username,
+		Username:    usernames[0],
 		IsAnonymous: false,
 		IsAdmin:     userConfig.IsAdmin,
 	}, nil
@@ -141,30 +145,11 @@ type AdminConfig struct {
 	Options OptionsConfig
 
 	// Mapping of public key to username
-	PublicKeys map[string]string `yaml:"-"`
+	PublicKeys map[string][]string `yaml:"-"`
 }
 
-func (c *Config) LoadSettings() (*AdminConfig, []PrivateKey, error) {
-	ret := &AdminConfig{
-		Users:  make(map[string]UserConfig),
-		Orgs:   make(map[string]OrgConfig),
-		Repos:  make(map[string]RepoConfig),
-		Groups: make(map[string][]string),
-
-		PublicKeys: make(map[string]string),
-	}
-
-	// Step 1: load the admin repo
-	adminRepo, err := c.EnsureRepo("admin/admin", true)
-	if err != nil {
-		log.Error().Err(err).Str("repo_path", "admin/admin").Msg("Failed to open admin repo")
-
-		// Most config repos are "optional", but if the admin repo can't even be
-		// created, we've got a big problem.
-		return nil, nil, err
-	}
-
-	// Step 2: Load the ssh keys from the admin repo. We want these to be
+func (ac *AdminConfig) loadAdminRepo(adminRepo *WorkingRepo) ([]PrivateKey, error) {
+	// Step 1: Load the ssh keys from the admin repo. We want these to be
 	// available even if there are config errors. However, even if this fails,
 	// it's not the end of the world. The SSH libraries we use will
 	// auto-generate keys if they don't exist at runtime.
@@ -175,20 +160,20 @@ func (c *Config) LoadSettings() (*AdminConfig, []PrivateKey, error) {
 
 		pk, err := GenerateRSAKey()
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		rsaData, err = pk.MarshalPrivateKey()
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		err = adminRepo.CreateFile("keys/id_rsa", rsaData)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 	rsaKey, err := ParseRSAKey(rsaData)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	pks = append(pks, rsaKey)
 
@@ -198,20 +183,20 @@ func (c *Config) LoadSettings() (*AdminConfig, []PrivateKey, error) {
 
 		pk, err := GenerateEd25519Key()
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		ed25519Data, err = pk.MarshalPrivateKey()
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		err = adminRepo.CreateFile("keys/id_ed25519", ed25519Data)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 	ed25519Key, err := ParseEd25519Key(ed25519Data)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	pks = append(pks, ed25519Key)
 
@@ -219,16 +204,16 @@ func (c *Config) LoadSettings() (*AdminConfig, []PrivateKey, error) {
 	// commit them.
 	status, err := adminRepo.Worktree.Status()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if !status.IsClean() {
 		err = adminRepo.Commit("Updated ssh keys", nil)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
-	// Step 3: load the root config from the admin repo
+	// Step 2: load the root config from the admin repo
 	data, err := adminRepo.GetFile("config.yml")
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to load settings")
@@ -240,60 +225,81 @@ func (c *Config) LoadSettings() (*AdminConfig, []PrivateKey, error) {
 		// own sample config.
 		err = adminRepo.CreateFile("config.yml", data)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		err = adminRepo.Commit("Added sample config.yml", nil)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
-	err = yaml.Unmarshal(data, &ret)
+	err = yaml.Unmarshal(data, &ac)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	// Step 4: Load the user configs from user config repos and merge them with
-	// the root config.
-	if ret.Options.UserConfig {
-		for username, user := range ret.Users {
-			if user.Repos == nil {
-				user.Repos = make(map[string]RepoConfig)
-			}
+	return pks, nil
+}
 
-			userConfig, userKeys, err := c.loadUser(username)
+func (ac *AdminConfig) loadAdminUserKeys(adminRepo *WorkingRepo) error {
+	usersDir, err := adminRepo.WorktreeFS.Chroot("users")
+	if err != nil {
+		return err
+	}
 
-			if ret.Options.UserConfigKeys {
-				// Add all the user keys - we actually do this before handling the error
-				// so if the user breaks their config, they can still hopefully SSH in
-				// to fix it.
-				for _, key := range userKeys {
-					// TODO: check for conflicts
-					ret.PublicKeys[string(key.Marshal())] = username
-				}
-			}
+	entries, err := usersDir.ReadDir(".")
+	if err != nil {
+		return err
+	}
 
-			if err != nil {
-				log.Warn().Err(err).Str("username", username).Msg("Failed to load user repo")
-				continue
-			}
+	for _, entry := range entries {
+		// If it's a directory, we want to load all the keys under this dir. If
+		// it's a file (and it's a valid name), load this specific file.
+		if entry.IsDir() {
+			continue
+		}
 
-			if ret.Options.UserConfigRepos {
-				// We only really need to merge repos when dealing with loading users,
-				// as we don't want them to be able to set config options.
-				for repoName, repo := range userConfig.Repos {
-					user.Repos[repoName] = MergeRepoConfigs(user.Repos[repoName], repo)
-				}
+		filename := entry.Name()
+
+		// If it ends in .pub, chop off the pub from the name.
+		var username string
+		if strings.HasSuffix(filename, ".pub") {
+			username = filename[:len(filename)-4]
+		} else {
+			username = filename
+		}
+
+		// Make sure this user is defined in the admin config.
+		if _, ok := ac.Users[username]; !ok {
+			ac.Users[username] = UserConfig{
+				Repos: make(map[string]RepoConfig),
 			}
+		}
+
+		f, err := usersDir.Open(filename)
+		if err != nil {
+			return err
+		}
+
+		pks, err := loadAuthorizedKeys(f)
+		if err != nil {
+			return err
+		}
+
+		for _, key := range pks {
+			mkey := key.RawMarshalAuthorizedKey()
+			ac.PublicKeys[mkey] = append(ac.PublicKeys[mkey], username)
 		}
 	}
 
-	// Step 5: Load the org configs from org config repos and merge them with
-	// the root config.
-	if ret.Options.OrgConfig {
+	return nil
+}
+
+func (ac *AdminConfig) loadOrgConfigs(c *Config) {
+	if ac.Options.OrgConfig {
 		tmpOrgs := make(map[string]OrgConfig)
-		for orgName, org := range ret.Orgs {
+		for orgName, org := range ac.Orgs {
 			if org.Repos == nil {
 				org.Repos = make(map[string]RepoConfig)
 			}
@@ -305,49 +311,102 @@ func (c *Config) LoadSettings() (*AdminConfig, []PrivateKey, error) {
 			}
 
 			// If they can't load repos from org configs, we need to ignore them
-			if !ret.Options.OrgConfigRepos {
+			if !ac.Options.OrgConfigRepos {
 				orgConfig.Repos = make(map[string]RepoConfig)
 			}
 
 			tmpOrgs[orgName] = orgConfig
 		}
 		for orgName, org := range tmpOrgs {
-			ret.Orgs[orgName] = MergeOrgConfigs(ret.Orgs[orgName], org)
+			ac.Orgs[orgName] = MergeOrgConfigs(ac.Orgs[orgName], org)
 		}
 	}
+}
 
-	// Step 6: Validation
+func (ac *AdminConfig) loadUserConfigs(c *Config) {
+	if ac.Options.UserConfig {
+		for username, user := range ac.Users {
+			if user.Repos == nil {
+				user.Repos = make(map[string]RepoConfig)
+			}
 
-	// Step 7: Normalization
+			userConfig, userKeys, err := c.loadUser(username)
+
+			if ac.Options.UserConfigKeys {
+				// Add all the user keys - we actually do this before handling the error
+				// so if the user breaks their config, they can still hopefully SSH in
+				// to fix it.
+				for _, key := range userKeys {
+					mkey := string(key.Marshal())
+					ac.PublicKeys[mkey] = append(ac.PublicKeys[mkey], username)
+				}
+			}
+
+			if err != nil {
+				log.Warn().Err(err).Str("username", username).Msg("Failed to load user repo")
+				continue
+			}
+
+			if ac.Options.UserConfigRepos {
+				// We only really need to merge repos when dealing with loading users,
+				// as we don't want them to be able to set config options.
+				for repoName, repo := range userConfig.Repos {
+					user.Repos[repoName] = MergeRepoConfigs(user.Repos[repoName], repo)
+				}
+			}
+		}
+	}
+}
+
+func (c *Config) LoadSettings() (*AdminConfig, []PrivateKey, error) {
+	ret := &AdminConfig{
+		Users:  make(map[string]UserConfig),
+		Orgs:   make(map[string]OrgConfig),
+		Repos:  make(map[string]RepoConfig),
+		Groups: make(map[string][]string),
+
+		PublicKeys: make(map[string][]string),
+	}
+
+	// Step 1: open the admin repo
+	adminRepo, err := c.EnsureRepo("admin/admin", true)
+	if err != nil {
+		log.Error().Err(err).Str("repo_path", "admin/admin").Msg("Failed to open admin repo")
+
+		// Most config repos are "optional", but if the admin repo can't even be
+		// created, we've got a big problem.
+		return nil, nil, err
+	}
+
+	// Step 2: load settings from the admin repo
+	pks, err := ret.loadAdminRepo(adminRepo)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	err = ret.loadAdminUserKeys(adminRepo)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Step 3: Load the user and org configs from their respective config config
+	// repos and merge them with the root config. Note that we ignore any errors
+	// here because we only want admin errors to cause issues.
+	ret.loadUserConfigs(c)
+	ret.loadOrgConfigs(c)
+
+	// Step 5: Validation
+
+	// Step 6: Normalization
 	err = ret.Normalize()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// Step 8: Ensure all repos
-	var repos []string
-
-	for repoName := range ret.Repos {
-		repos = append(repos, "top-level/"+repoName)
-	}
-
-	for userName, user := range ret.Users {
-		for repoName := range user.Repos {
-			repos = append(repos, "users/"+userName+"/"+repoName)
-		}
-	}
-
-	for orgName, org := range ret.Orgs {
-		for repoName := range org.Repos {
-			repos = append(repos, "orgs/"+orgName+"/"+repoName)
-		}
-	}
-
-	for _, repo := range repos {
-		_, err = c.EnsureRepo(repo, false)
-		if err != nil {
-			return nil, nil, err
-		}
+	// Step 7: Ensure all repos
+	err = ret.EnsureRepos(c)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	return ret, pks, nil
@@ -367,6 +426,7 @@ func (ac *AdminConfig) Normalize() error {
 
 	for repoKey, oldRepo := range ac.Repos {
 		newRepo := oldRepo
+
 		newRepo.Write = expandGroups(ac.Groups, newRepo.Write)
 		newRepo.Read = expandGroups(ac.Groups, newRepo.Read)
 		ac.Repos[repoKey] = newRepo
@@ -386,6 +446,39 @@ func (ac *AdminConfig) Normalize() error {
 		}
 
 		ac.Orgs[orgKey] = newOrg
+	}
+
+	for key := range ac.PublicKeys {
+		ac.PublicKeys[key] = sliceUniqMap(ac.PublicKeys[key])
+	}
+
+	return nil
+}
+
+func (ac *AdminConfig) EnsureRepos(c *Config) error {
+	var repos []string
+
+	for repoName := range ac.Repos {
+		repos = append(repos, "top-level/"+repoName)
+	}
+
+	for userName, user := range ac.Users {
+		for repoName := range user.Repos {
+			repos = append(repos, "users/"+userName+"/"+repoName)
+		}
+	}
+
+	for orgName, org := range ac.Orgs {
+		for repoName := range org.Repos {
+			repos = append(repos, "orgs/"+orgName+"/"+repoName)
+		}
+	}
+
+	for _, repo := range repos {
+		_, err := c.EnsureRepo(repo, false)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -411,30 +504,14 @@ func (c *Config) loadUser(username string) (UserConfig, []PublicKey, error) {
 		return uc, nil, err
 	}
 
-	keysDir, err := userRepo.WorktreeFS.ReadDir("keys")
+	f, err := userRepo.WorktreeFS.Open("authorized_keys")
 	if err != nil {
 		return uc, nil, err
 	}
 
-	var pks []PublicKey
-	for _, entry := range keysDir {
-		// We create .keep files in all the dirs to make it easier to ensure the
-		// dirs exist.
-		if entry.Name() == ".keep" {
-			continue
-		}
-
-		data, err := userRepo.GetFile("keys/" + entry.Name())
-		if err != nil {
-			return uc, nil, err
-		}
-
-		pk, _, _, _, err := ssh.ParseAuthorizedKey(data)
-		if err != nil {
-			return uc, nil, err
-		}
-
-		pks = append(pks, PublicKey{pk, ""})
+	pks, err := loadAuthorizedKeys(f)
+	if err != nil {
+		return uc, nil, err
 	}
 
 	return uc, pks, nil

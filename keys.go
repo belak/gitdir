@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -8,6 +10,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"io"
 	"io/ioutil"
 	"strings"
 
@@ -18,6 +21,46 @@ import (
 type PublicKey struct {
 	ssh.PublicKey
 	comment string
+}
+
+func loadAuthorizedKeys(f io.Reader) ([]PublicKey, error) {
+	var pks []PublicKey
+	reader := bufio.NewReader(f)
+	for {
+		line, _, err := reader.ReadLine()
+		if err != nil {
+			break
+		}
+
+		// Remove any leftover whitespace
+		line = bytes.TrimSpace(line)
+
+		// If it starts with a comment or is zero length skip it
+		if bytes.HasPrefix(line, []byte{'#'}) || len(line) == 0 {
+			continue
+		}
+
+		pk, err := UnmarshalPublicKey(line)
+		if err != nil {
+			return nil, err
+		}
+
+		pks = append(pks, pk)
+	}
+
+	return pks, nil
+}
+
+func UnmarshalPublicKey(data []byte) (PublicKey, error) {
+	var err error
+
+	var pk PublicKey
+	pk.PublicKey, pk.comment, _, _, err = ssh.ParseAuthorizedKey(data)
+	if err != nil {
+		return pk, err
+	}
+
+	return pk, nil
 }
 
 // Implement loading from a file. This is used by the cli package.
