@@ -98,8 +98,17 @@ type OrgConfig struct {
 
 type OptionsConfig struct {
 	// ImplicitRepos allows a user with admin access to create repos by simply
-	// cloning or pushing to them.
+	// pushing to them.
 	ImplicitRepos bool `yaml:"implicit_repos"`
+
+	// UserConfig allows users to configure themselves in their own config,
+	// rather than relying on the main admin config. This must be enabled for
+	// UserConfigRepos or UserConfigKeys to work.
+	UserConfig bool `yaml:"user_config"`
+
+	// UserConfigKeys allows users to specify ssh keys in their own config,
+	// rather than relying on the main admin config.
+	UserConfigKeys bool `yaml:"user_config_keys"`
 
 	// UserConfigRepos allows users to specify repos in their own config, rather
 	// than relying on the main admin config.
@@ -247,30 +256,35 @@ func (c *Config) LoadSettings() (*AdminConfig, []PrivateKey, error) {
 
 	// Step 4: Load the user configs from user config repos and merge them with
 	// the root config.
-	for username, user := range ret.Users {
-		if user.Repos == nil {
-			user.Repos = make(map[string]RepoConfig)
-		}
+	if ret.Options.UserConfig {
+		for username, user := range ret.Users {
+			if user.Repos == nil {
+				user.Repos = make(map[string]RepoConfig)
+			}
 
-		userConfig, userKeys, err := c.loadUser(username)
+			userConfig, userKeys, err := c.loadUser(username)
 
-		// Add all the user keys - we actually do this before handling the error
-		// so if the user breaks their config, they can still SSH in to fix it.
-		for _, key := range userKeys {
-			// TODO: check for conflicts
-			ret.PublicKeys[string(key.Marshal())] = username
-		}
+			if ret.Options.UserConfigKeys {
+				// Add all the user keys - we actually do this before handling the error
+				// so if the user breaks their config, they can still hopefully SSH in
+				// to fix it.
+				for _, key := range userKeys {
+					// TODO: check for conflicts
+					ret.PublicKeys[string(key.Marshal())] = username
+				}
+			}
 
-		if err != nil {
-			log.Warn().Err(err).Str("username", username).Msg("Failed to load user repo")
-			continue
-		}
+			if err != nil {
+				log.Warn().Err(err).Str("username", username).Msg("Failed to load user repo")
+				continue
+			}
 
-		if ret.Options.UserConfigRepos {
-			// We only really need to merge repos when dealing with loading users,
-			// as we don't want them to be able to set config options.
-			for repoName, repo := range userConfig.Repos {
-				user.Repos[repoName] = MergeRepoConfigs(user.Repos[repoName], repo)
+			if ret.Options.UserConfigRepos {
+				// We only really need to merge repos when dealing with loading users,
+				// as we don't want them to be able to set config options.
+				for repoName, repo := range userConfig.Repos {
+					user.Repos[repoName] = MergeRepoConfigs(user.Repos[repoName], repo)
+				}
 			}
 		}
 	}
