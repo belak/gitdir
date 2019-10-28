@@ -1,9 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
-	"fmt"
-
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli"
 	yaml "gopkg.in/yaml.v3"
@@ -49,10 +46,15 @@ func cmdAddUser(c *cli.Context) error {
 		return err
 	}
 
-	// We want to use RawMarshal here so the comment isn't included.
-	sum := sha256.Sum256([]byte(pubkey.RawMarshalAuthorizedKey()))
+	err = userRepo.UpdateFile("authorized_keys", func(data []byte) ([]byte, error) {
+		if len(data) != 0 {
+			data = append(data, '\n')
+		}
 
-	err = userRepo.CreateFile(fmt.Sprintf("keys/%x.pub", sum), []byte(pubkey.MarshalAuthorizedKey()))
+		data = append(data, []byte(pubkey.MarshalAuthorizedKey())...)
+
+		return data, nil
+	})
 	if err != nil {
 		return err
 	}

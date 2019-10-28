@@ -86,6 +86,8 @@ func NewCLIConfig(ctx *cli.Context) (*Config, error) {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
 
+	// It's easier to handle repo operations down the line if we switch to the
+	// base path. Also, repo names are prettier when you run into errors.
 	err := os.Chdir(c.BasePath)
 	if err != nil {
 		return c, err
