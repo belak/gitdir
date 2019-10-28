@@ -1,8 +1,10 @@
 # go-git-dir
 
-This project was inspired by gitolite, but also includes a built-in ssh server
-and some additional flexability. It is not considered stable, but should be
-usable enough to experiment with.
+[![Build Status](https://travis-ci.org/belak/go-gitdir.svg?branch=master)](https://travis-ci.org/belak/go-gitdir)
+
+This project was inspired by gitolite and gitosis, but also includes a built-in
+ssh server and some additional flexability. It is not considered stable, but
+should be usable enough to experiment with.
 
 The main goal of this project is to enable simple git hosting when a full
 solution like Bitbucket, Github, Gitlab, Gitea, etc is not needed. It should
@@ -16,11 +18,11 @@ should be fairly simple to migrate to or from other git hosting solutions.
 
 Build requirements:
 
-- Go 1.13
+- Go >= 1.13
 
 Runtime requirements:
 
-- git
+- git (for git-receive-pack and git-upload-pack)
 
 ## Building
 
@@ -61,10 +63,14 @@ managed by a person).
 Additionally, there are a number of options that can be specified in this file
 which change the behavior of the server.
 
-- `user_repos` - allow users to have repos located at ~username/repo-name
-
-There are a number of additional options in the sample config but they have not
-been implemented yet.
+- `implicit_repos` - allows a user with admin access to that area to create
+  repos by simply pushing to them.
+- `user_config_keys` - allows users to specify ssh keys in their own config,
+  rather than relying on the main admin config.
+- `user_config_repos` - allows users to specify repos in their own config,
+  rather than relying on the main admin config.
+- `org_config_repos` - allows org admins to specify repos in their own config,
+  rather than relying on the main admin config.
 
 ## Usage
 
@@ -83,8 +89,8 @@ $ go-gitdir --base-dir=/tmp/git add-user --username=belak --pubkey=$HOME/.ssh/id
 ```
 
 Note that you will need to manually clone the admin repository (at
-`$GITDIR_BASE_DIR/admin/admin`) to add a user as a .yml file in the users dir
-and define the admins group before things work as expected.
+`$GITDIR_BASE_DIR/admin/admin`) to add a user as an authorized_keys file in the
+users dir and define an admin user.
 
 Example user file:
 
@@ -95,5 +101,6 @@ keys:
 
 ## Repo Creation
 
-For any repo defined in the config, on the first access of that repo (push or
-pull), it will be created automatically.
+All repos defined in the config are created when the config is loaded. At
+runtime, if implicit repos are enabled, trying to access a repo where you have
+admin access will implicitly create it.

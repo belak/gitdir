@@ -61,7 +61,8 @@ func (serv *Server) Reload() error {
 	defer serv.lock.Unlock()
 
 	var pks []PrivateKey
-	serv.settings, pks, err = serv.c.LoadSettings()
+
+	serv.settings, pks, err = LoadSettings()
 	if err != nil {
 		return err
 	}
@@ -71,6 +72,7 @@ func (serv *Server) Reload() error {
 		if err != nil {
 			return err
 		}
+
 		serv.s.AddHostKey(signer)
 	}
 

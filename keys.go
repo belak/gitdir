@@ -25,15 +25,11 @@ type PublicKey struct {
 
 func loadAuthorizedKeys(f io.Reader) ([]PublicKey, error) {
 	var pks []PublicKey
-	reader := bufio.NewReader(f)
-	for {
-		line, _, err := reader.ReadLine()
-		if err != nil {
-			break
-		}
 
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
 		// Remove any leftover whitespace
-		line = bytes.TrimSpace(line)
+		line := bytes.TrimSpace(scanner.Bytes())
 
 		// If it starts with a comment or is zero length skip it
 		if bytes.HasPrefix(line, []byte{'#'}) || len(line) == 0 {
@@ -48,6 +44,10 @@ func loadAuthorizedKeys(f io.Reader) ([]PublicKey, error) {
 		pks = append(pks, pk)
 	}
 
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
 	return pks, nil
 }
 
@@ -55,6 +55,7 @@ func UnmarshalPublicKey(data []byte) (PublicKey, error) {
 	var err error
 
 	var pk PublicKey
+
 	pk.PublicKey, pk.comment, _, _, err = ssh.ParseAuthorizedKey(data)
 	if err != nil {
 		return pk, err
@@ -85,14 +86,17 @@ func (pk *PublicKey) RawMarshalAuthorizedKey() string {
 	if pk == nil || pk.PublicKey == nil {
 		return ""
 	}
+
 	return strings.TrimSpace(string(gossh.MarshalAuthorizedKey(pk)))
 }
 
 func (pk *PublicKey) MarshalAuthorizedKey() string {
 	key := pk.RawMarshalAuthorizedKey()
+
 	if pk.comment != "" {
 		return key + " " + pk.comment
 	}
+
 	return key
 }
 
@@ -104,12 +108,13 @@ func (pk *PublicKey) String() string {
 // Implement loading from yaml files
 func (pk *PublicKey) UnmarshalYAML(unmarshal func(v interface{}) error) error {
 	var rawData string
+
 	err := unmarshal(&rawData)
 	if err != nil {
 		return err
 	}
 
-	pk.PublicKey, _, _, _, err = ssh.ParseAuthorizedKey([]byte(rawData))
+	pk.PublicKey, pk.comment, _, _, err = ssh.ParseAuthorizedKey([]byte(rawData))
 	if err != nil {
 		return err
 	}

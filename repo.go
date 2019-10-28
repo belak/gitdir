@@ -5,13 +5,12 @@ import (
 	"strings"
 )
 
-type AccessType int
-
-const (
-	AccessTypeRead AccessType = iota
-	AccessTypeWrite
-	AccessTypeAdmin
-)
+// RepoLookup represents a query for a repository type.
+type RepoLookup interface {
+	Path() string
+	IsValid(*AdminConfig) bool
+	UserHasAccess(*AdminConfig, *User, AccessType) bool
+}
 
 var ErrInvalidRepoFormat = errors.New("invalid repo format")
 
