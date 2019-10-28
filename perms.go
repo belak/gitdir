@@ -7,6 +7,12 @@ func genericUserHasAccess(rc RepoConfig, u *User, a AccessType) bool {
 		return true
 	}
 
+	// If they're trying to read the repository and the repo config is public,
+	// they're allowed to access it.
+	if a == AccessTypeRead && rc.Public {
+		return true
+	}
+
 	// If a write user is requesting write or below, they can access the repo
 	if listContains(rc.Write, u.Username) && a <= AccessTypeWrite {
 		return true
@@ -169,7 +175,7 @@ func (rl repoLookupOrg) IsValid(c *AdminConfig) bool {
 	}
 
 	// If we allow implicit repos, it doesn't matter if the repo actually
-	// exists.
+	// exists, but we need to make sure they're an admin.
 	if c.Options.ImplicitRepos {
 		return true
 	}
@@ -184,6 +190,11 @@ func (rl repoLookupOrg) UserHasAccess(c *AdminConfig, u *User, a AccessType) boo
 	}
 
 	org := c.Orgs[rl.Org]
+
+	// If an org admin user is requesting admin or below, they can access the repo.
+	if listContains(org.Write, u.Username) && a <= AccessTypeAdmin {
+		return true
+	}
 
 	// If an org write user is requesting write or below, they can access the repo.
 	if listContains(org.Write, u.Username) && a <= AccessTypeWrite {

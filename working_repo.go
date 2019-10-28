@@ -27,7 +27,8 @@ type WorkingRepo struct {
 }
 
 // EnsureRepo will open a repository if it exists and try to create it if it
-// doesn't.
+// doesn't. runCheckout allows you to skip the checkout of the files in the
+// repo.
 func (c *Config) EnsureRepo(path string, runCheckout bool) (*WorkingRepo, error) {
 	fs := osfs.New(path)
 
