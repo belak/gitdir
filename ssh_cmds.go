@@ -52,9 +52,10 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 		return -1
 	}
 
-	// If implicit repos are enabled and the user has write access to this
-	// location, go ahead and create it.
-	if settings.Options.ImplicitRepos && repo.UserHasAccess(settings, user, AccessTypeWrite) {
+	// If implicit repos are enabled and the user has admin access to this
+	// location, go ahead and create it. All explicitly defined repos should be
+	// created when the config is loaded.
+	if settings.Options.ImplicitRepos && repo.UserHasAccess(settings, user, AccessTypeAdmin) {
 		_, err = config.EnsureRepo(repo.Path(), false)
 		if err != nil {
 			return -1

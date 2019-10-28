@@ -38,8 +38,15 @@ var AnonymousUser = &User{
 }
 
 type RepoConfig struct {
+	// Public allows any user of the service to access this repository for
+	// reading
+	Public bool
+
+	// Any user or group who explicitly has write access
 	Write []string
-	Read  []string
+
+	// Any user or group who explicitly has read access
+	Read []string
 }
 
 func MergeOrgConfigs(orgList ...OrgConfig) OrgConfig {
@@ -90,7 +97,7 @@ type OrgConfig struct {
 }
 
 type OptionsConfig struct {
-	// ImplicitRepos allows a user with write access to create repos by simply
+	// ImplicitRepos allows a user with admin access to create repos by simply
 	// cloning or pushing to them.
 	ImplicitRepos bool `yaml:"implicit_repos"`
 

@@ -10,6 +10,7 @@ type AccessType int
 const (
 	AccessTypeRead AccessType = iota
 	AccessTypeWrite
+	AccessTypeAdmin
 )
 
 var ErrInvalidRepoFormat = errors.New("invalid repo format")
