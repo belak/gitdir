@@ -23,8 +23,17 @@ type Config struct {
 	UserPrefix string
 	OrgPrefix  string
 
-	LogReadable bool
-	LogDebug    bool
+	LogFormat string
+	LogDebug  bool
+}
+
+var DefaultConfig = &Config{
+	BindAddr:   ":2222",
+	GitUser:    "git",
+	BasePath:   "./tmp",
+	UserPrefix: "~",
+	OrgPrefix:  "@",
+	LogFormat:  "json",
 }
 
 func cliFlags() []cli.Flag {
@@ -34,10 +43,11 @@ func cliFlags() []cli.Flag {
 			EnvVar: "GITDIR_DEBUG",
 			Usage:  "Enable debug logging",
 		},
-		cli.BoolFlag{
-			Name:   "log-readable",
-			EnvVar: "GITDIR_LOG_READABLE",
-			Usage:  "Enable human readable logging",
+		cli.StringFlag{
+			Name:   "log-format",
+			EnvVar: "GITDIR_LOG_FORMAT",
+			Usage:  "Log format: console or json",
+			Value:  DefaultConfig.LogFormat,
 		},
 		cli.StringFlag{
 			Name:     "base-dir",
@@ -48,7 +58,7 @@ func cliFlags() []cli.Flag {
 		cli.StringFlag{
 			Name:   "bind-addr",
 			EnvVar: "GITDIR_BIND_ADDR",
-			Value:  ":2222",
+			Value:  DefaultConfig.BindAddr,
 			Usage:  "Host and port to bind to",
 		},
 
@@ -56,32 +66,33 @@ func cliFlags() []cli.Flag {
 		cli.StringFlag{
 			Name:   "user-prefix",
 			EnvVar: "GITDIR_USER_PREFIX",
-			Value:  "~",
+			Value:  DefaultConfig.UserPrefix,
 			Usage:  "Prefix to use when cloning user repos",
 		},
 		cli.StringFlag{
 			Name:   "org-prefix",
 			EnvVar: "GITDIR_ORG_PREFIX",
-			Value:  "@",
+			Value:  DefaultConfig.OrgPrefix,
 			Usage:  "Prefix to use when cloning org repos",
 		},
 	}
 }
 
-func NewCLIConfig(ctx *cli.Context) (*Config, error) {
-	c := NewDefaultConfig()
+func NewCLIConfig(ctx *cli.Context) (Config, error) {
+	c := *DefaultConfig
 
-	c.LogReadable = ctx.GlobalBool("log-readable")
+	c.LogFormat = ctx.GlobalString("log-format")
 	c.LogDebug = ctx.GlobalBool("debug")
 	c.BasePath = ctx.GlobalString("base-dir")
 	c.BindAddr = ctx.GlobalString("bind-addr")
 	c.UserPrefix = ctx.GlobalString("user-prefix")
 	c.OrgPrefix = ctx.GlobalString("org-prefix")
 
-	// Set up the logger
-	if c.LogReadable {
+	// Set up the logger - anything other than console defaults to json.
+	if c.LogFormat == "console" {
 		log.Logger = zerolog.New(zerolog.NewConsoleWriter()).With().Timestamp().Logger()
 	}
+
 	if c.LogDebug {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
@@ -94,15 +105,4 @@ func NewCLIConfig(ctx *cli.Context) (*Config, error) {
 	}
 
 	return c, nil
-}
-
-// NewDefaultConfig returns the base config.
-func NewDefaultConfig() *Config {
-	return &Config{
-		BindAddr:   ":2222",
-		GitUser:    "git",
-		BasePath:   "./tmp",
-		UserPrefix: "~",
-		OrgPrefix:  "@",
-	}
 }

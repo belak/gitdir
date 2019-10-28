@@ -2,6 +2,14 @@ package main
 
 import "path"
 
+type AccessType int
+
+const (
+	AccessTypeRead AccessType = iota
+	AccessTypeWrite
+	AccessTypeAdmin
+)
+
 func genericUserHasAccess(rc RepoConfig, u *User, a AccessType) bool {
 	if u.IsAdmin {
 		return true
@@ -24,13 +32,6 @@ func genericUserHasAccess(rc RepoConfig, u *User, a AccessType) bool {
 	}
 
 	return false
-}
-
-// RepoLookup represents a query for a repository type.
-type RepoLookup interface {
-	Path() string
-	IsValid(*AdminConfig) bool
-	UserHasAccess(*AdminConfig, *User, AccessType) bool
 }
 
 // repoLookupAdmin represents the admin repo (admin)
@@ -119,6 +120,7 @@ func (rl repoLookupUser) IsValid(c *AdminConfig) bool {
 	}
 
 	_, ok = user.Repos[rl.Name]
+
 	return ok
 }
 
@@ -175,12 +177,13 @@ func (rl repoLookupOrg) IsValid(c *AdminConfig) bool {
 	}
 
 	// If we allow implicit repos, it doesn't matter if the repo actually
-	// exists, but we need to make sure they're an admin.
+	// exists.
 	if c.Options.ImplicitRepos {
 		return true
 	}
 
 	_, ok = org.Repos[rl.Name]
+
 	return ok
 }
 
@@ -192,7 +195,7 @@ func (rl repoLookupOrg) UserHasAccess(c *AdminConfig, u *User, a AccessType) boo
 	org := c.Orgs[rl.Org]
 
 	// If an org admin user is requesting admin or below, they can access the repo.
-	if listContains(org.Write, u.Username) && a <= AccessTypeAdmin {
+	if listContains(org.Admin, u.Username) && a <= AccessTypeAdmin {
 		return true
 	}
 

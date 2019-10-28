@@ -1,0 +1,11 @@
+linters:
+  enable-all: true
+  disable:
+    - godox
+    - prealloc
+    - unparam
+    - gochecknoglobals
+
+linters-settings:
+  govet:
+    check-shadowing: true

@@ -67,14 +67,17 @@ func groupMembers(groups map[string][]string, groupName string, groupPath []stri
 func sliceUniqMap(s []string) []string {
 	seen := make(map[string]struct{}, len(s))
 	j := 0
+
 	for _, v := range s {
 		if _, ok := seen[v]; ok {
 			continue
 		}
+
 		seen[v] = struct{}{}
 		s[j] = v
 		j++
 	}
+
 	return s[:j]
 }
 
@@ -128,8 +131,11 @@ func sanitize(in string) string {
 	return strings.ToLower(in)
 }
 
-func runCommand(log *zerolog.Logger, session ssh.Session, args []string) int {
-	cmd := exec.Command(args[0], args[1:]...)
+// TODO: see if this can be cleaned up
+func runCommand(log *zerolog.Logger, session ssh.Session, args []string) int { //nolint:funlen
+	// NOTE: we are explicitly ignoring gosec here because we *only* pass in
+	// known commands here.
+	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -159,21 +165,21 @@ func runCommand(log *zerolog.Logger, session ssh.Session, args []string) int {
 
 	go func() {
 		defer stdin.Close()
-		if _, err := io.Copy(stdin, session); err != nil {
+		if _, stdinErr := io.Copy(stdin, session); stdinErr != nil {
 			log.Error().Err(err).Msg("Failed to write session to stdin")
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		if _, err := io.Copy(session, stdout); err != nil {
+		if _, stdoutErr := io.Copy(session, stdout); stdoutErr != nil {
 			log.Error().Err(err).Msg("Failed to write stdout to session")
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		if _, err := io.Copy(session.Stderr(), stderr); err != nil {
+		if _, stderrErr := io.Copy(session.Stderr(), stderr); stderrErr != nil {
 			log.Error().Err(err).Msg("Failed to write stderr to session")
 		}
 	}()

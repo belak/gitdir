@@ -29,7 +29,7 @@ type WorkingRepo struct {
 // EnsureRepo will open a repository if it exists and try to create it if it
 // doesn't. runCheckout allows you to skip the checkout of the files in the
 // repo.
-func (c *Config) EnsureRepo(path string, runCheckout bool) (*WorkingRepo, error) {
+func EnsureRepo(path string, runCheckout bool) (*WorkingRepo, error) {
 	fs := osfs.New(path)
 
 	// TODO: this probably shouldn't be memfs.
@@ -52,6 +52,7 @@ func (c *Config) EnsureRepo(path string, runCheckout bool) (*WorkingRepo, error)
 		// worktree fs.
 		repo, err = git.Open(repoFS, worktreeFS)
 	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -100,15 +101,18 @@ func (wr *WorkingRepo) CreateFile(filename string, data []byte) error {
 	}
 
 	_, err = wr.Worktree.Add(filename)
+
 	return err
 }
 
 func (wr *WorkingRepo) UpdateFile(filename string, cb func([]byte) ([]byte, error)) error {
 	data, _ := wr.GetFile(filename)
+
 	data, err := cb(data)
 	if err != nil {
 		return err
 	}
+
 	return wr.CreateFile(filename, data)
 }
 
@@ -120,5 +124,6 @@ func (wr *WorkingRepo) Commit(msg string, author *object.Signature) error {
 	_, err := wr.Worktree.Commit(msg, &git.CommitOptions{
 		Author: author,
 	})
+
 	return err
 }

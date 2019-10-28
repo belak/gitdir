@@ -9,9 +9,10 @@ import (
 	"github.com/gliderlabs/ssh"
 )
 
-func cmdWhoami(ctx context.Context, s ssh.Session, cmd []string) int {
+func cmdWhoami(ctx context.Context, s ssh.Session, cmd []string) int { //nolint:interfacer
 	user := CtxUser(ctx)
 	_ = writeStringFmt(s, "logged in as %s\r\n", user.Username)
+
 	return 0
 }
 
@@ -39,6 +40,7 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 
 	repo, err := config.LookupRepo(repoName)
 	if err != nil {
+		_ = writeStringFmt(s.Stderr(), "Invalid repo format\r\n")
 		return -1
 	}
 
@@ -56,7 +58,7 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 	// location, go ahead and create it. All explicitly defined repos should be
 	// created when the config is loaded.
 	if settings.Options.ImplicitRepos && repo.UserHasAccess(settings, user, AccessTypeAdmin) {
-		_, err = config.EnsureRepo(repo.Path(), false)
+		_, err = EnsureRepo(repo.Path(), false)
 		if err != nil {
 			return -1
 		}

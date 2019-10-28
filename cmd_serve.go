@@ -15,7 +15,7 @@ func cmdServe(c *cli.Context) error {
 		log.Fatal().Err(err).Msg("Error loading core config")
 	}
 
-	serv, err := NewServer(config)
+	serv, err := NewServer(&config)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to load SSH server")
 	}

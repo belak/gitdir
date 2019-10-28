@@ -26,8 +26,10 @@ func addUserFlags() []cli.Flag {
 	}
 }
 
-func cmdAddUser(c *cli.Context) error {
-	config, err := NewCLIConfig(c)
+// TODO: clean this up
+func cmdAddUser(c *cli.Context) error { //nolint:funlen
+	// Load the CLI config - note that this will switch to the proper basedir
+	_, err := NewCLIConfig(c)
 	if err != nil {
 		return err
 	}
@@ -36,12 +38,12 @@ func cmdAddUser(c *cli.Context) error {
 	pubkey := c.Generic("pubkey").(*PublicKey)
 	admin := c.Bool("admin")
 
-	adminRepo, err := config.EnsureRepo("admin/admin", true)
+	adminRepo, err := EnsureRepo("admin/admin", true)
 	if err != nil {
 		return err
 	}
 
-	userRepo, err := config.EnsureRepo("admin/user-"+username, true)
+	userRepo, err := EnsureRepo("admin/user-"+username, true)
 	if err != nil {
 		return err
 	}
@@ -66,9 +68,9 @@ func cmdAddUser(c *cli.Context) error {
 
 	if admin {
 		err = adminRepo.UpdateFile("config.yml", func(data []byte) ([]byte, error) {
-			rootNode, targetNode, err := yamlEnsureDocument(data)
-			if err != nil {
-				return nil, err
+			rootNode, targetNode, intErr := yamlEnsureDocument(data)
+			if intErr != nil {
+				return nil, intErr
 			}
 
 			// Find the user and add is_admin on
@@ -93,5 +95,6 @@ func cmdAddUser(c *cli.Context) error {
 	}
 
 	log.Info().Msg("Success!")
+
 	return nil
 }
