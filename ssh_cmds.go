@@ -21,7 +21,6 @@ func cmdNotFound(ctx context.Context, s ssh.Session, cmd []string) int {
 	return 1
 }
 
-// TODO: don't bother currying here
 func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []string, access AccessType) int {
 	if len(cmd) != 2 {
 		_ = writeStringFmt(s.Stderr(), "Missing repo name argument\r\n")
