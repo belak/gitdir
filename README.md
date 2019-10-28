@@ -1,6 +1,6 @@
 # go-git-dir
 
-[![Build Status](https://travis-ci.org/belak/go-gitdir.svg?branch=master)](https://travis-ci.org/belak/go-gitdir)
+[![Go Report Card](https://goreportcard.com/badge/github.com/belak/go-gitdir)](https://goreportcard.com/report/github.com/belak/go-gitdir) [![Build Status](https://travis-ci.org/belak/go-gitdir.svg?branch=master)](https://travis-ci.org/belak/go-gitdir)
 
 This project was inspired by gitolite and gitosis, but also includes a built-in
 ssh server and some additional flexability. It is not considered stable, but
