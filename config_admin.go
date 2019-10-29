@@ -1,8 +1,6 @@
 package main
 
 import (
-	"strings"
-
 	"github.com/rs/zerolog/log"
 	yaml "gopkg.in/yaml.v3"
 )
@@ -59,8 +57,6 @@ func LoadAdminConfig() (*AdminConfig, []PrivateKey, error) {
 	// Step 1: open the admin repo
 	adminRepo, err := EnsureRepo("admin/admin", true)
 	if err != nil {
-		log.Error().Err(err).Str("repo_path", "admin/admin").Msg("Failed to open admin repo")
-
 		// Most config repos are "optional", but if the admin repo can't even be
 		// created, we've got a big problem.
 		return nil, nil, err
@@ -74,11 +70,6 @@ func LoadAdminConfig() (*AdminConfig, []PrivateKey, error) {
 	}
 
 	pks, err := loadAdminSSHKeys(adminRepo)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	err = ret.loadAdminUserKeys(adminRepo)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -280,79 +271,27 @@ func loadAdminSSHKeys(adminRepo *WorkingRepo) ([]PrivateKey, error) {
 }
 
 func (ac *AdminConfig) loadAdminRepo(adminRepo *WorkingRepo) error {
+	err := adminRepo.UpdateFile("config.yml", ensureSampleConfig)
+	if err != nil {
+		return err
+	}
+
+	status, err := adminRepo.Worktree.Status()
+	if err != nil {
+		return err
+	}
+
+	if !status.IsClean() {
+		err = adminRepo.Commit("Updated config.yml", nil)
+		if err != nil {
+			return err
+		}
+	}
+
 	data, err := adminRepo.GetFile("config.yml")
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to load settings")
-
-		// Set data to our sample config
-		data = []byte(sampleConfig)
-
-		// If we failed to load config, we can update the config with our
-		// own sample config.
-		err = adminRepo.CreateFile("config.yml", data)
-		if err != nil {
-			return err
-		}
-
-		err = adminRepo.Commit("Added sample config.yml", nil)
-		if err != nil {
-			return err
-		}
-	}
-
-	return yaml.Unmarshal(data, &ac)
-}
-
-func (ac *AdminConfig) loadAdminUserKeys(adminRepo *WorkingRepo) error {
-	usersDir, err := adminRepo.WorktreeFS.Chroot("users")
-	if err != nil {
 		return err
 	}
 
-	entries, err := usersDir.ReadDir(".")
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		// If it's a directory, we want to load all the keys under this dir. If
-		// it's a file (and it's a valid name), load this specific file.
-		if entry.IsDir() {
-			continue
-		}
-
-		filename := entry.Name()
-
-		// If it ends in .pub, chop off the pub from the name.
-		var username string
-		if strings.HasSuffix(filename, ".pub") {
-			username = filename[:len(filename)-4]
-		} else {
-			username = filename
-		}
-
-		// Make sure this user is defined in the admin config.
-		if _, ok := ac.Users[username]; !ok {
-			ac.Users[username] = UserConfig{
-				Repos: make(map[string]RepoConfig),
-			}
-		}
-
-		f, err := usersDir.Open(filename)
-		if err != nil {
-			return err
-		}
-
-		pks, err := loadAuthorizedKeys(f)
-		if err != nil {
-			return err
-		}
-
-		for _, key := range pks {
-			mkey := key.RawMarshalAuthorizedKey()
-			ac.PublicKeys[mkey] = append(ac.PublicKeys[mkey], username)
-		}
-	}
-
-	return nil
+	return yaml.Unmarshal(data, ac)
 }

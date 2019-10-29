@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/rs/zerolog/log"
-	yaml "gopkg.in/yaml.v3"
 )
 
 type OrgConfig struct {
@@ -19,17 +18,7 @@ func loadOrg(orgName string) (OrgConfig, error) {
 		Repos: make(map[string]RepoConfig),
 	}
 
-	orgRepo, err := EnsureRepo("admin/org-"+orgName, true)
-	if err != nil {
-		return oc, err
-	}
-
-	data, err := orgRepo.GetFile("config.yml")
-	if err != nil {
-		return oc, err
-	}
-
-	err = yaml.Unmarshal(data, &oc)
+	err := loadConfig("admin/org-"+orgName, &oc)
 
 	return oc, err
 }

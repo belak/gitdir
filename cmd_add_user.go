@@ -43,55 +43,54 @@ func cmdAddUser(c *cli.Context) error { //nolint:funlen
 		return err
 	}
 
-	userRepo, err := EnsureRepo("admin/user-"+username, true)
+	// Make sure the user repo exists, just in case, even if we don't plan on
+	// using it.
+	_, err = EnsureRepo("admin/user-"+username, true)
 	if err != nil {
 		return err
 	}
 
-	err = userRepo.UpdateFile("authorized_keys", func(data []byte) ([]byte, error) {
-		if len(data) != 0 {
-			data = append(data, '\n')
+	err = adminRepo.UpdateFile("config.yml", func(data []byte) ([]byte, error) {
+		rootNode, _, err := ensureSampleConfigYaml(data) //nolint:govet
+		if err != nil {
+			return nil, err
 		}
 
-		data = append(data, []byte(pubkey.MarshalAuthorizedKey())...)
+		// We can assume the config file is in a valid format because of
+		// ensureSampleConfig
+		targetNode := rootNode.Content[0]
+		usersVal := yamlLookupKey(targetNode, "users")
+		userVal, _ := yamlEnsureKey(usersVal, username, &yaml.Node{Kind: yaml.MappingNode}, "", false)
 
-		return data, nil
+		keysVal, _ := yamlEnsureKey(userVal, "keys", &yaml.Node{Kind: yaml.SequenceNode}, "", false)
+		keysVal.Content = append(keysVal.Content, &yaml.Node{
+			Kind:  yaml.ScalarNode,
+			Value: pubkey.String(),
+		})
+
+		if admin {
+			yamlEnsureKey(
+				userVal,
+				"is_admin",
+				&yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Tag:   "!!bool",
+					Value: "true",
+				},
+				"",
+				true,
+			)
+		}
+
+		return yamlEncode(rootNode)
 	})
 	if err != nil {
 		return err
 	}
 
-	err = userRepo.Commit("Added key", nil)
+	err = adminRepo.Commit("Updated user "+username, nil)
 	if err != nil {
 		return err
-	}
-
-	if admin {
-		err = adminRepo.UpdateFile("config.yml", func(data []byte) ([]byte, error) {
-			rootNode, targetNode, intErr := yamlEnsureDocument(data)
-			if intErr != nil {
-				return nil, intErr
-			}
-
-			// Find the user and add is_admin on
-			usersValue := yamlLookupKey(targetNode, "users")
-			userValue := yamlLookupKey(usersValue, username)
-			yamlEnsureKey(userValue, "is_admin", &yaml.Node{
-				Kind:  yaml.ScalarNode,
-				Tag:   "!!bool",
-				Value: "true",
-			})
-
-			return yaml.Marshal(rootNode)
-		})
-		if err != nil {
-			return err
-		}
-
-		err = userRepo.Commit("Set "+username+" to admin", nil)
-		if err != nil {
-			return err
-		}
 	}
 
 	log.Info().Msg("Success!")

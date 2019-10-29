@@ -12,7 +12,22 @@ import (
 	"github.com/gliderlabs/ssh"
 	"github.com/rs/zerolog"
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
+	yaml "gopkg.in/yaml.v3"
 )
+
+func loadConfig(repoPath string, target interface{}) error {
+	repo, err := EnsureRepo(repoPath, true)
+	if err != nil {
+		return err
+	}
+
+	data, err := repo.GetFile("config.yml")
+	if err != nil {
+		return err
+	}
+
+	return yaml.Unmarshal(data, target)
+}
 
 func newAdminGitSignature() *object.Signature {
 	return &object.Signature{
