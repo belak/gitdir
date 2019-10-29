@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -10,7 +8,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
-	"io"
 	"io/ioutil"
 	"strings"
 
@@ -23,45 +20,21 @@ type PublicKey struct {
 	comment string
 }
 
-func loadAuthorizedKeys(f io.Reader) ([]PublicKey, error) {
-	var pks []PublicKey
+// Implement loading from yaml files
+func (pk *PublicKey) UnmarshalYAML(unmarshal func(v interface{}) error) error {
+	var rawData string
 
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		// Remove any leftover whitespace
-		line := bytes.TrimSpace(scanner.Bytes())
-
-		// If it starts with a comment or is zero length skip it
-		if bytes.HasPrefix(line, []byte{'#'}) || len(line) == 0 {
-			continue
-		}
-
-		pk, err := UnmarshalPublicKey(line)
-		if err != nil {
-			return nil, err
-		}
-
-		pks = append(pks, pk)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	return pks, nil
-}
-
-func UnmarshalPublicKey(data []byte) (PublicKey, error) {
-	var err error
-
-	var pk PublicKey
-
-	pk.PublicKey, pk.comment, _, _, err = ssh.ParseAuthorizedKey(data)
+	err := unmarshal(&rawData)
 	if err != nil {
-		return pk, err
+		return err
 	}
 
-	return pk, nil
+	pk.PublicKey, pk.comment, _, _, err = ssh.ParseAuthorizedKey([]byte(rawData))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Implement loading from a file. This is used by the cli package.
@@ -81,6 +54,11 @@ func (pk *PublicKey) Set(value string) error {
 	return nil
 }
 
+// String makes it much easier to support yaml
+func (pk *PublicKey) String() string {
+	return pk.MarshalAuthorizedKey()
+}
+
 // TODO: convert to []byte
 func (pk *PublicKey) RawMarshalAuthorizedKey() string {
 	if pk == nil || pk.PublicKey == nil {
@@ -98,28 +76,6 @@ func (pk *PublicKey) MarshalAuthorizedKey() string {
 	}
 
 	return key
-}
-
-// String makes it much easier to support yaml
-func (pk *PublicKey) String() string {
-	return pk.MarshalAuthorizedKey()
-}
-
-// Implement loading from yaml files
-func (pk *PublicKey) UnmarshalYAML(unmarshal func(v interface{}) error) error {
-	var rawData string
-
-	err := unmarshal(&rawData)
-	if err != nil {
-		return err
-	}
-
-	pk.PublicKey, pk.comment, _, _, err = ssh.ParseAuthorizedKey([]byte(rawData))
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 type PrivateKey interface {

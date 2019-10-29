@@ -1,6 +1,8 @@
 package main
 
-import "path"
+import (
+	"path"
+)
 
 type AccessType int
 

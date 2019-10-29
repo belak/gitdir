@@ -40,7 +40,7 @@ func EnsureRepo(path string, runCheckout bool) (*WorkingRepo, error) {
 	repo, err := git.Open(repoFS, worktreeFS)
 	// If we explicitly got a NotExists error, we should init the repo
 	if err == git.ErrRepositoryNotExists {
-		log.Warn().Str("repo_path", "admin/admin").Msg("Repo doesn't exist: creating")
+		log.Warn().Str("repo_path", path).Msg("Repo doesn't exist: creating")
 
 		// Init the repo without a worktree.
 		_, err = git.Init(repoFS, nil)

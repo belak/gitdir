@@ -2,49 +2,25 @@ package main
 
 import (
 	"github.com/rs/zerolog/log"
-	yaml "gopkg.in/yaml.v3"
 )
 
 type UserConfig struct {
-	// TODO: user groups?
+	Repos map[string]RepoConfig `yaml:"repos"`
+	Keys  []PublicKey           `yaml:"keys"`
 
-	IsAdmin  bool                  `yaml:"is_admin"`
-	Disabled bool                  `yaml:"disabled"`
-	Repos    map[string]RepoConfig `yaml:"repos"`
-	Keys     []PublicKey           `yaml:"keys"`
+	// IsAdmin and Disabled can only be specified in admin config files.
+	IsAdmin  bool `yaml:"is_admin"`
+	Disabled bool `yaml:"disabled"`
 }
 
-func loadUser(username string) (UserConfig, []PublicKey, error) {
+func loadUser(username string) (UserConfig, error) {
 	uc := UserConfig{
 		Repos: make(map[string]RepoConfig),
 	}
 
-	userRepo, err := EnsureRepo("admin/user-"+username, true)
-	if err != nil {
-		return uc, nil, err
-	}
+	err := loadConfig("admin/user-"+username, &uc)
 
-	data, err := userRepo.GetFile("config.yml")
-	if err != nil {
-		return uc, nil, err
-	}
-
-	err = yaml.Unmarshal(data, &uc)
-	if err != nil {
-		return uc, nil, err
-	}
-
-	f, err := userRepo.WorktreeFS.Open("authorized_keys")
-	if err != nil {
-		return uc, nil, err
-	}
-
-	pks, err := loadAuthorizedKeys(f)
-	if err != nil {
-		return uc, nil, err
-	}
-
-	return uc, pks, nil
+	return uc, err
 }
 
 func (ac *AdminConfig) loadUserConfigs() {
@@ -58,20 +34,23 @@ func (ac *AdminConfig) loadUserConfigs() {
 			user.Repos = make(map[string]RepoConfig)
 		}
 
-		userConfig, userKeys, err := loadUser(username)
+		userConfig, err := loadUser(username)
+		if err != nil {
+			log.Warn().Err(err).Str("username", username).Msg("Failed to load user repo")
+		}
 
 		if ac.Options.UserConfigKeys {
 			// Add all the user keys - we actually do this before handling the error
 			// so if the user breaks their config, they can still hopefully SSH in
 			// to fix it.
-			for _, key := range userKeys {
+			for _, key := range userConfig.Keys {
 				mkey := string(key.Marshal())
+
 				ac.PublicKeys[mkey] = append(ac.PublicKeys[mkey], username)
 			}
 		}
 
 		if err != nil {
-			log.Warn().Err(err).Str("username", username).Msg("Failed to load user repo")
 			continue
 		}
 

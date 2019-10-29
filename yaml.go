@@ -1,10 +1,23 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 
 	yaml "gopkg.in/yaml.v3"
 )
+
+func yamlEncode(rootNode *yaml.Node) ([]byte, error) {
+	// All this nonsense is really so we can set indentation to 2 spaces.
+	buf := &bytes.Buffer{}
+	enc := yaml.NewEncoder(buf)
+
+	enc.SetIndent(2)
+
+	err := enc.Encode(rootNode)
+
+	return buf.Bytes(), err
+}
 
 func yamlLookupKey(n *yaml.Node, key string) *yaml.Node {
 	for i := 0; i+1 < len(n.Content); i += 2 {
@@ -16,21 +29,39 @@ func yamlLookupKey(n *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-func yamlEnsureKey(targetNode *yaml.Node, key string, newNode *yaml.Node) {
+// TODO: clean up the options here
+func yamlEnsureKey(
+	targetNode *yaml.Node,
+	key string,
+	newNode *yaml.Node,
+	comment string,
+	force bool,
+) (*yaml.Node, bool) {
 	valNode := yamlLookupKey(targetNode, key)
 
 	if valNode == nil {
+		// Set valNode so we can return properly
+		valNode = newNode
+
+		// Add the key and value to the mapping node.
 		targetNode.Content = append(
 			targetNode.Content,
 			&yaml.Node{
-				Kind:  yaml.ScalarNode,
-				Value: key,
+				Kind:        yaml.ScalarNode,
+				Value:       key,
+				HeadComment: comment,
 			},
-			newNode,
+			valNode,
 		)
-	} else {
+
+		return valNode, true
+	} else if force {
+		// Replace the node and update the comment
 		*valNode = *newNode
+		valNode.HeadComment = comment
 	}
+
+	return valNode, false
 }
 
 func yamlEnsureDocument(data []byte) (*yaml.Node, *yaml.Node, error) {
