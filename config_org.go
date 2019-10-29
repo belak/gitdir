@@ -4,9 +4,9 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// OrgConfig represents the values under orgs in the main admin config or the
+// contents of the config file in the org config repo.
 type OrgConfig struct {
-	// TODO: org groups
-
 	Admin []string
 	Write []string
 	Read  []string
@@ -54,6 +54,8 @@ func (ac *AdminConfig) loadOrgConfigs() {
 	}
 }
 
+// MergeOrgConfigs flattens a number of org configs for the same org into one
+// OrgConfig.
 func MergeOrgConfigs(orgList ...OrgConfig) OrgConfig {
 	root := OrgConfig{
 		Repos: make(map[string]RepoConfig),

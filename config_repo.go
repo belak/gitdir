@@ -1,5 +1,7 @@
 package main
 
+// RepoConfig represents the values under repos in the main admin config, any
+// org configs, or any user configs.
 type RepoConfig struct {
 	// Public allows any user of the service to access this repository for
 	// reading
@@ -12,6 +14,8 @@ type RepoConfig struct {
 	Read []string
 }
 
+// MergeRepoConfigs flattens a number of repo configs for the same repo into
+// one RepoConfig.
 func MergeRepoConfigs(rcList ...RepoConfig) RepoConfig {
 	var root RepoConfig
 

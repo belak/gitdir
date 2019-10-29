@@ -4,6 +4,9 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// UserConfig represents the values under users in the main admin config or
+// the contents of the config file in the user config repo. Note that only
+// Repos and Keys may be loaded from the user config repo.
 type UserConfig struct {
 	Repos map[string]RepoConfig `yaml:"repos"`
 	Keys  []PublicKey           `yaml:"keys"`

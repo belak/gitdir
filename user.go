@@ -4,17 +4,21 @@ import (
 	"errors"
 )
 
+// User is the internal representation of a user. This data is copied from the
+// loaded config file.
 type User struct {
 	Username    string
 	IsAnonymous bool
 	IsAdmin     bool
 }
 
+// AnonymousUser is the user that is returned when no user is available.
 var AnonymousUser = &User{
 	Username:    "<anonymous>",
 	IsAnonymous: true,
 }
 
+// GetUserFromKey looks up a user object given their PublicKey.
 func (ac *AdminConfig) GetUserFromKey(pk PublicKey) (*User, error) {
 	usernames, ok := ac.PublicKeys[pk.RawMarshalAuthorizedKey()]
 	if !ok {
@@ -37,6 +41,7 @@ func (ac *AdminConfig) GetUserFromKey(pk PublicKey) (*User, error) {
 	}, nil
 }
 
+// GetUserFromInvite looks up a user object given an invite code.
 func (ac *AdminConfig) GetUserFromInvite(invite string) (*User, error) {
 	username, ok := ac.Invites[invite]
 	if !ok {

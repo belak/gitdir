@@ -5,12 +5,10 @@ import (
 	yaml "gopkg.in/yaml.v3"
 )
 
-// This is a combination of all the config types we're going to be loading. This
-// is a root config meant to hold all the loaded configs in an easier to process
-// format.
+// AdminConfig is a combination of all the config types we're going to be
+// loading. This is a root config meant to hold all the loaded configs in an
+// easier to process format.
 type AdminConfig struct {
-	// TODO: global read/write? is this only for top level repos?
-
 	// These all come directly from the yaml files.
 	Invites map[string]string
 	Users   map[string]UserConfig
@@ -23,6 +21,24 @@ type AdminConfig struct {
 	PublicKeys map[string][]string `yaml:"-"`
 }
 
+func newAdminConfig() *AdminConfig {
+	return &AdminConfig{
+		Invites: make(map[string]string),
+		Users:   make(map[string]UserConfig),
+		Orgs:    make(map[string]OrgConfig),
+		Repos:   make(map[string]RepoConfig),
+		Groups:  make(map[string][]string),
+
+		PublicKeys: make(map[string][]string),
+
+		// Defaults. These should be set in ensure config, but we have them here
+		// for reference.
+		Options: defaultAdminOptions,
+	}
+}
+
+// AdminOptionsConfig contains all the server level settings which can be
+// changed at runtime.
 type AdminOptionsConfig struct {
 	// GitUser refers to which username to use as the global git user.
 	GitUser string `yaml:"git_user"`
@@ -64,20 +80,12 @@ var defaultAdminOptions = AdminOptionsConfig{
 	InvitePrefix: "invite:",
 }
 
+// LoadAdminConfig loads an AdminConfig and PrivateKeys from the admin repo at
+// admin/admin. An error should only be returned in the case of an
+// unrecoverable error. If the server can start up at all, this should return
+// nil and log any relevant warnings.
 func LoadAdminConfig() (*AdminConfig, []PrivateKey, error) {
-	ret := &AdminConfig{
-		Invites: make(map[string]string),
-		Users:   make(map[string]UserConfig),
-		Orgs:    make(map[string]OrgConfig),
-		Repos:   make(map[string]RepoConfig),
-		Groups:  make(map[string][]string),
-
-		PublicKeys: make(map[string][]string),
-
-		// Defaults. These should be set in ensure config, but we have them here
-		// for reference.
-		Options: defaultAdminOptions,
-	}
+	ret := newAdminConfig()
 
 	// Step 1: open the admin repo
 	adminRepo, err := EnsureRepo("admin/admin", true)
@@ -109,13 +117,13 @@ func LoadAdminConfig() (*AdminConfig, []PrivateKey, error) {
 	// Step 5: Validation
 
 	// Step 6: Normalization
-	err = ret.Normalize()
+	err = ret.normalize()
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Step 7: Ensure all repos
-	err = ret.EnsureRepos()
+	err = ret.ensureRepos()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -149,7 +157,7 @@ func (ac *AdminConfig) loadAdminRepo(adminRepo *WorkingRepo) error {
 	return yaml.Unmarshal(data, ac)
 }
 
-func (ac *AdminConfig) Normalize() error {
+func (ac *AdminConfig) normalize() error {
 	for name := range ac.Groups {
 		// Replace each of the groups with their expanded versions. This means
 		// any future accesses won't need to recurse and so we can ignore the
@@ -193,7 +201,7 @@ func (ac *AdminConfig) Normalize() error {
 	return nil
 }
 
-func (ac *AdminConfig) EnsureRepos() error {
+func (ac *AdminConfig) ensureRepos() error {
 	var repos []string
 
 	for repoName := range ac.Repos {

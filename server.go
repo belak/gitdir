@@ -12,18 +12,19 @@ import (
 	yaml "gopkg.in/yaml.v3"
 )
 
+// Server represents a gitdir server.
 type Server struct {
 	lock *sync.RWMutex
 	s    *ssh.Server
 	c    *Config
 
-	// Server level logger
-	log zerolog.Logger
-
-	// This represents the internal state of the server.
+	// Internal state
+	log      zerolog.Logger
 	settings *AdminConfig
 }
 
+// NewServer configures a new gitdir server and attempts to load the config
+// from the admin repo.
 func NewServer(c *Config) (*Server, error) {
 	var err error
 
@@ -48,6 +49,8 @@ func NewServer(c *Config) (*Server, error) {
 	return serv, nil
 }
 
+// GetAdminConfig returns the currently in use version of the AdminConfig in a
+// thread-safe way.
 func (serv *Server) GetAdminConfig() *AdminConfig {
 	serv.lock.RLock()
 	defer serv.lock.RUnlock()
@@ -55,6 +58,7 @@ func (serv *Server) GetAdminConfig() *AdminConfig {
 	return serv.settings
 }
 
+// AcceptInvite attempts to accept an invite and set up the given user.
 func (serv *Server) AcceptInvite(invite string, key PublicKey) bool { //nolint:funlen
 	serv.lock.Lock()
 	defer serv.lock.Unlock()
@@ -132,6 +136,7 @@ func (serv *Server) AcceptInvite(invite string, key PublicKey) bool { //nolint:f
 	return err == nil
 }
 
+// Reload reloads the server config in a thread-safe way.
 func (serv *Server) Reload() error {
 	serv.lock.Lock()
 	defer serv.lock.Unlock()
@@ -163,6 +168,7 @@ func (serv *Server) reloadInternal() error {
 	return nil
 }
 
+// ListenAndServe listens on the BindAddr given in the config.
 func (serv *Server) ListenAndServe() error {
 	serv.log.Info().Str("port", serv.c.BindAddr).Msg("Starting SSH server")
 

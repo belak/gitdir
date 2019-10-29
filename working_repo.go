@@ -4,10 +4,10 @@ import (
 	"io/ioutil"
 
 	"github.com/rs/zerolog/log"
-	"gopkg.in/src-d/go-billy.v4"
+	billy "gopkg.in/src-d/go-billy.v4"
 	"gopkg.in/src-d/go-billy.v4/memfs"
 	"gopkg.in/src-d/go-billy.v4/osfs"
-	"gopkg.in/src-d/go-git.v4"
+	git "gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/src-d/go-git.v4/plumbing/cache"
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
@@ -80,6 +80,7 @@ func EnsureRepo(path string, runCheckout bool) (*WorkingRepo, error) {
 	}, nil
 }
 
+// GetFile is a convenience method to get the contents of a file in the repo.
 func (wr *WorkingRepo) GetFile(filename string) ([]byte, error) {
 	f, err := wr.WorktreeFS.Open(filename)
 	if err != nil {
@@ -89,6 +90,8 @@ func (wr *WorkingRepo) GetFile(filename string) ([]byte, error) {
 	return ioutil.ReadAll(f)
 }
 
+// CreateFile is a convenience method to set the contents of a file in the
+// repo and stage it.
 func (wr *WorkingRepo) CreateFile(filename string, data []byte) error {
 	f, err := wr.WorktreeFS.Create(filename)
 	if err != nil {
@@ -105,6 +108,9 @@ func (wr *WorkingRepo) CreateFile(filename string, data []byte) error {
 	return err
 }
 
+// UpdateFile is a convenience method to get the contents of a file, pass it
+// to a callback, write the contents back to the file if no error was
+// returned, and stage the file.
 func (wr *WorkingRepo) UpdateFile(filename string, cb func([]byte) ([]byte, error)) error {
 	data, _ := wr.GetFile(filename)
 
@@ -116,6 +122,8 @@ func (wr *WorkingRepo) UpdateFile(filename string, cb func([]byte) ([]byte, erro
 	return wr.CreateFile(filename, data)
 }
 
+// Commit is a convenience method to make working with the worktree a little
+// bit easier.
 func (wr *WorkingRepo) Commit(msg string, author *object.Signature) error {
 	if author == nil {
 		author = newAdminGitSignature()

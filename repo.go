@@ -12,8 +12,12 @@ type RepoLookup interface {
 	UserHasAccess(*AdminConfig, *User, AccessType) bool
 }
 
+// ErrInvalidRepoFormat is returned when a repo is looked up which cannot
+// exist based on the parsed format. This does not mean existence was checked
+// in any other way.
 var ErrInvalidRepoFormat = errors.New("invalid repo format")
 
+// ParseRepo returns a RepoLookup representing the parsed pathname.
 func ParseRepo(options *AdminOptionsConfig, pathname string) (RepoLookup, error) {
 	if pathname == "admin" {
 		return &repoLookupAdmin{}, nil

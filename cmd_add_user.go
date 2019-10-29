@@ -26,7 +26,6 @@ func addUserFlags() []cli.Flag {
 	}
 }
 
-// TODO: clean this up
 func cmdAddUser(c *cli.Context) error { //nolint:funlen
 	// Load the CLI config - note that this will switch to the proper basedir
 	_, err := NewCLIConfig(c)

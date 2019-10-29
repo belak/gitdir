@@ -4,8 +4,11 @@ import (
 	"path"
 )
 
+// AccessType represents the type of access being requested for a repository.
 type AccessType int
 
+// Each AccessType represents Read, Write, or Admin permissions on a
+// repository.
 const (
 	AccessTypeRead AccessType = iota
 	AccessTypeWrite

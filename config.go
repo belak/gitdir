@@ -16,6 +16,8 @@ import (
 //
 // This file is meant for environment variable settings.
 
+// Config stores all the server-level settings. These cannot be changed at
+// runtime.
 type Config struct {
 	BindAddr  string
 	BasePath  string
@@ -23,6 +25,7 @@ type Config struct {
 	LogDebug  bool
 }
 
+// DefaultConfig is used as the base config.
 var DefaultConfig = &Config{
 	BindAddr:  ":2222",
 	BasePath:  "./tmp",
@@ -57,6 +60,8 @@ func cliFlags() []cli.Flag {
 	}
 }
 
+// NewCLIConfig returns a config with all the values pulled from the
+// cli.Context.
 func NewCLIConfig(ctx *cli.Context) (Config, error) {
 	c := *DefaultConfig
 
