@@ -62,7 +62,7 @@ func (serv *Server) Reload() error {
 
 	var pks []PrivateKey
 
-	serv.settings, pks, err = LoadSettings()
+	serv.settings, pks, err = LoadAdminConfig()
 	if err != nil {
 		return err
 	}
