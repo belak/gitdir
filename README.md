@@ -89,14 +89,54 @@ $ go-gitdir --base-dir=/tmp/git add-user --username=belak --pubkey=$HOME/.ssh/id
 ```
 
 Note that you will need to manually clone the admin repository (at
-`$GITDIR_BASE_DIR/admin/admin`) to add a user as an authorized_keys file in the
-users dir and define an admin user.
+`$GITDIR_BASE_DIR/admin/admin`) to add a user to `config.yml` and set them as an
+admin.
 
-Example user file:
+## Sample Config
+
+Sample admin `config.yml`:
 
 ```
-keys:
-  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIIdmFwaB4lwmogg7ggFE8M45Zywx1W3T7dGktY563FM belak@laptop
+users:
+  belak:
+    is_admin: true
+    keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDeQfBUWIqpGXS8xCOg/0RKVOGTnzpIdL7r9wK1/xA52 belak@tmp
+    repos:
+      personal-gitdir: {}
+
+groups:
+  admins:
+    - belak
+
+repos:
+  go-gitdir:
+    public: true
+
+    write:
+      - $admins
+    read:
+      - some-other-user
+
+orgs:
+  vault:
+    admins:
+      - $admins
+    write:
+      - some-org-user
+    read:
+      - some-other-org-user
+
+    repos:
+      the-vault:
+        write:
+          - some-repo-access-user
+
+options:
+  implicit_repos: false
+  user_config_keys: true
+  user_config_repos: false
+  org_config_repos: false
 ```
 
 ## Repo Creation
