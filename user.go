@@ -36,3 +36,21 @@ func (ac *AdminConfig) GetUserFromKey(pk PublicKey) (*User, error) {
 		IsAdmin:     userConfig.IsAdmin,
 	}, nil
 }
+
+func (ac *AdminConfig) GetUserFromInvite(invite string) (*User, error) {
+	username, ok := ac.Invites[invite]
+	if !ok {
+		return AnonymousUser, errors.New("invite does not match a user")
+	}
+
+	userConfig, ok := ac.Users[username]
+	if !ok {
+		return AnonymousUser, errors.New("invite does not match a user")
+	}
+
+	return &User{
+		Username:    username,
+		IsAnonymous: false,
+		IsAdmin:     userConfig.IsAdmin,
+	}, nil
+}

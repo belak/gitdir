@@ -7,6 +7,24 @@ import (
 	yaml "gopkg.in/yaml.v3"
 )
 
+func remove(slice []*yaml.Node, s int) []*yaml.Node {
+	return append(slice[:s], slice[s+1:]...)
+}
+
+func yamlRemoveKey(targetNode *yaml.Node, key string) bool {
+	idx := yamlLookupKeyValueIndex(targetNode, key)
+	if idx == -1 {
+		return false
+	}
+
+	// Removing the index of the target node twice should drop the key and
+	// value.
+	targetNode.Content = remove(targetNode.Content, idx)
+	targetNode.Content = remove(targetNode.Content, idx)
+
+	return true
+}
+
 func yamlEncode(rootNode *yaml.Node) ([]byte, error) {
 	// All this nonsense is really so we can set indentation to 2 spaces.
 	buf := &bytes.Buffer{}
@@ -19,14 +37,23 @@ func yamlEncode(rootNode *yaml.Node) ([]byte, error) {
 	return buf.Bytes(), err
 }
 
-func yamlLookupKey(n *yaml.Node, key string) *yaml.Node {
+func yamlLookupKeyValueIndex(n *yaml.Node, key string) int {
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		if n.Content[i].Kind == yaml.ScalarNode && n.Content[i].Value == key {
-			return n.Content[i+1]
+			return i
 		}
 	}
 
-	return nil
+	return -1
+}
+
+func yamlLookupVal(n *yaml.Node, key string) *yaml.Node {
+	idx := yamlLookupKeyValueIndex(n, key)
+	if idx == -1 {
+		return nil
+	}
+
+	return n.Content[idx+1]
 }
 
 // TODO: clean up the options here
@@ -37,7 +64,7 @@ func yamlEnsureKey(
 	comment string,
 	force bool,
 ) (*yaml.Node, bool) {
-	valNode := yamlLookupKey(targetNode, key)
+	valNode := yamlLookupVal(targetNode, key)
 
 	if valNode == nil {
 		// Set valNode so we can return properly

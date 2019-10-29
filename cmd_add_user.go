@@ -59,7 +59,7 @@ func cmdAddUser(c *cli.Context) error { //nolint:funlen
 		// We can assume the config file is in a valid format because of
 		// ensureSampleConfig
 		targetNode := rootNode.Content[0]
-		usersVal := yamlLookupKey(targetNode, "users")
+		usersVal := yamlLookupVal(targetNode, "users")
 		userVal, _ := yamlEnsureKey(usersVal, username, &yaml.Node{Kind: yaml.MappingNode}, "", false)
 
 		keysVal, _ := yamlEnsureKey(userVal, "keys", &yaml.Node{Kind: yaml.SequenceNode}, "", false)

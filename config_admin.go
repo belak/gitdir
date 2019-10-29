@@ -12,6 +12,7 @@ type AdminConfig struct {
 	// TODO: global read/write? is this only for top level repos?
 
 	// These all come directly from the yaml files.
+	Invites map[string]string
 	Users   map[string]UserConfig
 	Orgs    map[string]OrgConfig
 	Repos   map[string]RepoConfig
@@ -20,9 +21,6 @@ type AdminConfig struct {
 
 	// Mapping of public key to username
 	PublicKeys map[string][]string `yaml:"-"`
-
-	// Mapping of invites to username
-	Invites map[string][]string `yaml:"-"`
 }
 
 type AdminOptionsConfig struct {
@@ -34,6 +32,9 @@ type AdminOptionsConfig struct {
 
 	// UserPrefix refers to the prefix to use when cloning user repos.
 	UserPrefix string `yaml:"user_prefix"`
+
+	// InvitePrefix refers to the prefix to use when sshing in with an invite.
+	InvitePrefix string `yaml:"invite_prefix"`
 
 	// ImplicitRepos allows a user with admin access to that area to create
 	// repos by simply pushing to them.
@@ -57,17 +58,19 @@ type AdminOptionsConfig struct {
 }
 
 var defaultAdminOptions = AdminOptionsConfig{
-	GitUser:    "git",
-	OrgPrefix:  "@",
-	UserPrefix: "~",
+	GitUser:      "git",
+	OrgPrefix:    "@",
+	UserPrefix:   "~",
+	InvitePrefix: "invite:",
 }
 
 func LoadAdminConfig() (*AdminConfig, []PrivateKey, error) {
 	ret := &AdminConfig{
-		Users:  make(map[string]UserConfig),
-		Orgs:   make(map[string]OrgConfig),
-		Repos:  make(map[string]RepoConfig),
-		Groups: make(map[string][]string),
+		Invites: make(map[string]string),
+		Users:   make(map[string]UserConfig),
+		Orgs:    make(map[string]OrgConfig),
+		Repos:   make(map[string]RepoConfig),
+		Groups:  make(map[string][]string),
 
 		PublicKeys: make(map[string][]string),
 
@@ -147,16 +150,6 @@ func (ac *AdminConfig) loadAdminRepo(adminRepo *WorkingRepo) error {
 }
 
 func (ac *AdminConfig) Normalize() error {
-	for username, user := range ac.Users {
-		if !user.Disabled {
-			user.Invites = nil
-		}
-
-		for _, invite := range user.Invites {
-			ac.Invites[invite] = append(ac.Invites[invite], username)
-		}
-	}
-
 	for name := range ac.Groups {
 		// Replace each of the groups with their expanded versions. This means
 		// any future accesses won't need to recurse and so we can ignore the
@@ -195,10 +188,6 @@ func (ac *AdminConfig) Normalize() error {
 
 	for key := range ac.PublicKeys {
 		ac.PublicKeys[key] = sliceUniqMap(ac.PublicKeys[key])
-	}
-
-	for key := range ac.Invites {
-		ac.Invites[key] = sliceUniqMap(ac.Invites[key])
 	}
 
 	return nil

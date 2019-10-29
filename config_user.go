@@ -33,7 +33,7 @@ func (ac *AdminConfig) loadUserConfigs() {
 
 		// Load keys from the admin config
 		for _, key := range user.Keys {
-			mkey := string(key.Marshal())
+			mkey := key.RawMarshalAuthorizedKey()
 
 			ac.PublicKeys[mkey] = append(ac.PublicKeys[mkey], username)
 		}
@@ -51,7 +51,7 @@ func (ac *AdminConfig) loadUserConfigs() {
 		if ac.Options.UserConfigKeys {
 			// Load keys from the user config.
 			for _, key := range userConfig.Keys {
-				mkey := string(key.Marshal())
+				mkey := key.RawMarshalAuthorizedKey()
 
 				ac.PublicKeys[mkey] = append(ac.PublicKeys[mkey], username)
 			}

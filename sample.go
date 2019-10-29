@@ -23,7 +23,8 @@ func ensureSampleConfigYaml(data []byte) (*yaml.Node, bool, error) {
 		return nil, false, err
 	}
 
-	vals := [4]bool{
+	vals := [5]bool{
+		ensureSampleInvites(targetNode),
 		ensureSampleUsers(targetNode),
 		ensureSampleGroups(targetNode),
 		ensureSampleOrgs(targetNode),
@@ -37,6 +38,26 @@ func ensureSampleConfigYaml(data []byte) (*yaml.Node, bool, error) {
 	}
 
 	return rootNode, false, nil
+}
+
+func ensureSampleInvites(targetNode *yaml.Node) bool {
+	_, modified := yamlEnsureKey(
+		targetNode,
+		"invites",
+		&yaml.Node{Kind: yaml.MappingNode},
+		`
+Invites define temporary codes for a user to get in to the service. They
+can SSH in using ssh invite:invite-code@go-code and it will add that public
+key to their user.
+#
+Sample invites:
+#
+invites:
+  orai7Quaipoocungah1vee6Ieh8Ien: belak`,
+		false,
+	)
+
+	return modified
 }
 
 func ensureSampleUsers(targetNode *yaml.Node) bool {
@@ -142,6 +163,11 @@ var sampleOptions = []struct {
 		Name:    "user_prefix",
 		Comment: "the prefix to use when cloning user repos",
 		Value:   defaultAdminOptions.UserPrefix,
+	},
+	{
+		Name:    "invite_prefix",
+		Comment: "the prefix to use when sshing in with an invite",
+		Value:   defaultAdminOptions.InvitePrefix,
 	},
 	{
 		Name: "implicit_repos",
