@@ -1,18 +1,29 @@
-# go-git-dir
+# go-gitdir
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/belak/go-gitdir)](https://goreportcard.com/report/github.com/belak/go-gitdir) [![Build Status](https://travis-ci.org/belak/go-gitdir.svg?branch=master)](https://travis-ci.org/belak/go-gitdir)
+
+This project makes it incredibly easy to host a secure git server with a config
+that can be easily rolled back.
+
+It aims to solve a number of problems other git servers have:
+
+- Requires no external dependencies other than the binary and git
+- Stores its configuration in a repo managed by itself
+- Doesn't hook into the system's user accounts
+- No vendor lock-in - everything is just a bare git repository
+
+## Origins
+
+The main goal of this project is to enable simple git hosting when a full
+solution like Bitbucket, Github, Gitlab, Gitea, etc is not needed.
 
 This project was inspired by gitolite and gitosis, but also includes a built-in
 ssh server and some additional flexability. It is not considered stable, but
 should be usable enough to experiment with.
 
-The main goal of this project is to enable simple git hosting when a full
-solution like Bitbucket, Github, Gitlab, Gitea, etc is not needed. It should
-require no additional resources, other than the directory it is pointed at, the
-running server, and a git installation.
-
 Thankfully because all the repos are simply stored as bare git repositories, it
-should be fairly simple to migrate to or from other git hosting solutions.
+should be fairly simple to migrate to or from other git hosting solutions. There
+is no vendor lock-in.
 
 ## Requirements
 
