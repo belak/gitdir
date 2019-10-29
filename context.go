@@ -16,13 +16,12 @@ func (c contextKey) String() string {
 
 const (
 	contextKeyUser          = contextKey("go-git-dir-user")
-	contextKeyConfig        = contextKey("go-git-dir-config")
 	contextKeyLogger        = contextKey("go-git-dir-logger")
 	contextKeyAdminSettings = contextKey("go-git-dir-admin-settings")
 )
 
-func CtxExtract(ctx context.Context) (*zerolog.Logger, *Config, *AdminConfig, *User) {
-	return CtxLogger(ctx), CtxConfig(ctx), CtxSettings(ctx), CtxUser(ctx)
+func CtxExtract(ctx context.Context) (*zerolog.Logger, *AdminConfig, *User) {
+	return CtxLogger(ctx), CtxSettings(ctx), CtxUser(ctx)
 }
 
 func CtxSetUser(parent ssh.Context, user *User) {
@@ -65,12 +64,4 @@ func CtxLogger(ctx context.Context) *zerolog.Logger {
 	}
 
 	return ctxLog
-}
-
-func CtxSetConfig(parent ssh.Context, config *Config) {
-	parent.SetValue(contextKeyConfig, config)
-}
-
-func CtxConfig(ctx context.Context) *Config {
-	return ctx.Value(contextKeyConfig).(*Config)
 }

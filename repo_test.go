@@ -45,11 +45,8 @@ var repoTestCases = []struct {
 }
 
 func TestParseRepo(t *testing.T) {
-	c := *DefaultConfig
-	c.BasePath = "."
-
 	for _, testCase := range repoTestCases {
-		lookup, err := ParseRepo(&c, testCase.In)
+		lookup, err := ParseRepo(&defaultAdminOptions, testCase.In)
 
 		if testCase.Errors {
 			assert.Error(t, err)

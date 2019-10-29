@@ -107,7 +107,7 @@ func (serv *Server) handlePublicKey(ctx ssh.Context, incomingKey ssh.PublicKey) 
 	}
 
 	// If they weren't the git user make sure their username matches their key.
-	if remoteUser != serv.c.GitUser && remoteUser != user.Username {
+	if remoteUser != settings.Options.GitUser && remoteUser != user.Username {
 		slog.Warn().Msg("Key belongs to different user")
 		return false
 	}
@@ -116,9 +116,6 @@ func (serv *Server) handlePublicKey(ctx ssh.Context, incomingKey ssh.PublicKey) 
 	CtxSetUser(ctx, user)
 	CtxSetSettings(ctx, settings)
 	CtxSetLogger(ctx, &slog)
-
-	// Config will never change, so we can pull this directly from the server.
-	CtxSetConfig(ctx, serv.c)
 
 	return true
 }
@@ -167,13 +164,4 @@ func (serv *Server) handleSession(s ssh.Session) {
 
 	slog.Info().Int("return_code", exit).Msg("Return code")
 	_ = s.Exit(exit)
-}
-
-func (c *Config) LookupRepo(repoPath string) (RepoLookup, error) {
-	lookup, err := ParseRepo(c, repoPath)
-	if err != nil {
-		return nil, err
-	}
-
-	return lookup, nil
 }

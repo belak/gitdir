@@ -20,9 +20,21 @@ type AdminConfig struct {
 
 	// Mapping of public key to username
 	PublicKeys map[string][]string `yaml:"-"`
+
+	// Mapping of invites to username
+	Invites map[string][]string `yaml:"-"`
 }
 
 type AdminOptionsConfig struct {
+	// GitUser refers to which username to use as the global git user.
+	GitUser string `yaml:"git_user"`
+
+	// OrgPrefix refers to the prefix to use when cloning org repos.
+	OrgPrefix string `yaml:"org_prefix"`
+
+	// UserPrefix refers to the prefix to use when cloning user repos.
+	UserPrefix string `yaml:"user_prefix"`
+
 	// ImplicitRepos allows a user with admin access to that area to create
 	// repos by simply pushing to them.
 	ImplicitRepos bool `yaml:"implicit_repos"`
@@ -44,6 +56,12 @@ type AdminOptionsConfig struct {
 	OrgConfigRepos bool `yaml:"org_config_repos"`
 }
 
+var defaultAdminOptions = AdminOptionsConfig{
+	GitUser:    "git",
+	OrgPrefix:  "@",
+	UserPrefix: "~",
+}
+
 func LoadAdminConfig() (*AdminConfig, []PrivateKey, error) {
 	ret := &AdminConfig{
 		Users:  make(map[string]UserConfig),
@@ -52,6 +70,10 @@ func LoadAdminConfig() (*AdminConfig, []PrivateKey, error) {
 		Groups: make(map[string][]string),
 
 		PublicKeys: make(map[string][]string),
+
+		// Defaults. These should be set in ensure config, but we have them here
+		// for reference.
+		Options: defaultAdminOptions,
 	}
 
 	// Step 1: open the admin repo
@@ -63,7 +85,8 @@ func LoadAdminConfig() (*AdminConfig, []PrivateKey, error) {
 	}
 
 	// Step 2: load settings from the admin repo - if any of these failed, we
-	// can kill the server.
+	// can kill the server. In general, if they failed, it means something
+	// happened at the git repo level or it's an invalid config.
 	err = ret.loadAdminRepo(adminRepo)
 	if err != nil {
 		return nil, nil, err
@@ -97,7 +120,43 @@ func LoadAdminConfig() (*AdminConfig, []PrivateKey, error) {
 	return ret, pks, nil
 }
 
+func (ac *AdminConfig) loadAdminRepo(adminRepo *WorkingRepo) error {
+	err := adminRepo.UpdateFile("config.yml", ensureSampleConfig)
+	if err != nil {
+		return err
+	}
+
+	status, err := adminRepo.Worktree.Status()
+	if err != nil {
+		return err
+	}
+
+	if !status.IsClean() {
+		err = adminRepo.Commit("Updated config.yml", nil)
+		if err != nil {
+			return err
+		}
+	}
+
+	data, err := adminRepo.GetFile("config.yml")
+	if err != nil {
+		return err
+	}
+
+	return yaml.Unmarshal(data, ac)
+}
+
 func (ac *AdminConfig) Normalize() error {
+	for username, user := range ac.Users {
+		if !user.Disabled {
+			user.Invites = nil
+		}
+
+		for _, invite := range user.Invites {
+			ac.Invites[invite] = append(ac.Invites[invite], username)
+		}
+	}
+
 	for name := range ac.Groups {
 		// Replace each of the groups with their expanded versions. This means
 		// any future accesses won't need to recurse and so we can ignore the
@@ -136,6 +195,10 @@ func (ac *AdminConfig) Normalize() error {
 
 	for key := range ac.PublicKeys {
 		ac.PublicKeys[key] = sliceUniqMap(ac.PublicKeys[key])
+	}
+
+	for key := range ac.Invites {
+		ac.Invites[key] = sliceUniqMap(ac.Invites[key])
 	}
 
 	return nil
@@ -268,30 +331,4 @@ func loadAdminSSHKeys(adminRepo *WorkingRepo) ([]PrivateKey, error) {
 	}
 
 	return pks, nil
-}
-
-func (ac *AdminConfig) loadAdminRepo(adminRepo *WorkingRepo) error {
-	err := adminRepo.UpdateFile("config.yml", ensureSampleConfig)
-	if err != nil {
-		return err
-	}
-
-	status, err := adminRepo.Worktree.Status()
-	if err != nil {
-		return err
-	}
-
-	if !status.IsClean() {
-		err = adminRepo.Commit("Updated config.yml", nil)
-		if err != nil {
-			return err
-		}
-	}
-
-	data, err := adminRepo.GetFile("config.yml")
-	if err != nil {
-		return err
-	}
-
-	return yaml.Unmarshal(data, ac)
 }

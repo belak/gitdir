@@ -27,7 +27,7 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 		return 1
 	}
 
-	log, config, settings, user := CtxExtract(ctx)
+	log, settings, user := CtxExtract(ctx)
 
 	// Sanitize the repo name
 	//   - Trim all slashes from beginning and end
@@ -37,7 +37,7 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 	//   - Sanitize the name
 	repoName := sanitize(path.Clean("/" + strings.Trim(cmd[1], "/"))[1:])
 
-	repo, err := config.LookupRepo(repoName)
+	repo, err := ParseRepo(&settings.Options, repoName)
 	if err != nil {
 		_ = writeStringFmt(s.Stderr(), "Invalid repo format\r\n")
 		return -1

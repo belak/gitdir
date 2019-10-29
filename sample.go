@@ -125,26 +125,51 @@ vault:
 var sampleOptions = []struct {
 	Name    string
 	Comment string
+	Tag     string
+	Value   string
 }{
+	{
+		Name:    "git_user",
+		Comment: "which username to use as the global git user",
+		Value:   defaultAdminOptions.GitUser,
+	},
+	{
+		Name:    "org_prefix",
+		Comment: "the prefix to use when cloning org repos",
+		Value:   defaultAdminOptions.OrgPrefix,
+	},
+	{
+		Name:    "user_prefix",
+		Comment: "the prefix to use when cloning user repos",
+		Value:   defaultAdminOptions.UserPrefix,
+	},
 	{
 		Name: "implicit_repos",
 		Comment: `allow users with admin access to a given area to create repos by simply
 pushing to them.`,
+		Tag:   "!!bool",
+		Value: "false",
 	},
 	{
 		Name: "user_config_keys",
 		Comment: `allows users to specify ssh keys in their own config, rather than relying
 on the main admin config.`,
+		Tag:   "!!bool",
+		Value: "false",
 	},
 	{
 		Name: "user_config_repos",
 		Comment: `allows users to specify repos in their own config, rather than relying on
 the main admin config.`,
+		Tag:   "!!bool",
+		Value: "false",
 	},
 	{
 		Name: "org_config_repos",
 		Comment: `allows org admins to specify repos in their own config, rather than
 relying on the main admin config.`,
+		Tag:   "!!bool",
+		Value: "false",
 	},
 }
 
@@ -157,15 +182,15 @@ func ensureSampleOptions(targetNode *yaml.Node) bool {
 		false,
 	)
 
-	// Options should all default to false.
+	// Ensure all our options are on the options struct.
 	for _, opt := range sampleOptions {
 		_, added := yamlEnsureKey(
 			optionsVal,
 			opt.Name,
 			&yaml.Node{
 				Kind:  yaml.ScalarNode,
-				Tag:   "!!bool",
-				Value: "false",
+				Tag:   opt.Tag,
+				Value: opt.Value,
 			},
 			opt.Comment,
 			false,

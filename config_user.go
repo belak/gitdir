@@ -8,9 +8,11 @@ type UserConfig struct {
 	Repos map[string]RepoConfig `yaml:"repos"`
 	Keys  []PublicKey           `yaml:"keys"`
 
-	// IsAdmin and Disabled can only be specified in admin config files.
-	IsAdmin  bool `yaml:"is_admin"`
-	Disabled bool `yaml:"disabled"`
+	// IsAdmin, Disabled, and Invites can only be specified in admin config
+	// files. Note that invites are only valid if the user is set to disabled.
+	IsAdmin  bool     `yaml:"is_admin"`
+	Disabled bool     `yaml:"disabled"`
+	Invites  []string `yaml:"invites"`
 }
 
 func loadUser(username string) (UserConfig, error) {
@@ -24,14 +26,21 @@ func loadUser(username string) (UserConfig, error) {
 }
 
 func (ac *AdminConfig) loadUserConfigs() {
-	// If we have no reason to load config from user repos, we can bail early.
-	if !ac.Options.UserConfigRepos && !ac.Options.UserConfigKeys {
-		return
-	}
-
 	for username, user := range ac.Users {
 		if user.Repos == nil {
 			user.Repos = make(map[string]RepoConfig)
+		}
+
+		// Load keys from the admin config
+		for _, key := range user.Keys {
+			mkey := string(key.Marshal())
+
+			ac.PublicKeys[mkey] = append(ac.PublicKeys[mkey], username)
+		}
+
+		// If we have no reason to load config from user repos, we can bail early.
+		if !ac.Options.UserConfigRepos && !ac.Options.UserConfigKeys {
+			continue
 		}
 
 		userConfig, err := loadUser(username)
@@ -40,9 +49,7 @@ func (ac *AdminConfig) loadUserConfigs() {
 		}
 
 		if ac.Options.UserConfigKeys {
-			// Add all the user keys - we actually do this before handling the error
-			// so if the user breaks their config, they can still hopefully SSH in
-			// to fix it.
+			// Load keys from the user config.
 			for _, key := range userConfig.Keys {
 				mkey := string(key.Marshal())
 

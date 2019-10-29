@@ -14,14 +14,14 @@ type RepoLookup interface {
 
 var ErrInvalidRepoFormat = errors.New("invalid repo format")
 
-func ParseRepo(c *Config, pathname string) (RepoLookup, error) {
+func ParseRepo(options *AdminOptionsConfig, pathname string) (RepoLookup, error) {
 	if pathname == "admin" {
 		return &repoLookupAdmin{}, nil
 	}
 
-	if strings.HasPrefix(pathname, c.OrgPrefix) {
+	if strings.HasPrefix(pathname, options.OrgPrefix) {
 		// Strip off the org prefix and continue parsing
-		pathname = pathname[len(c.OrgPrefix):]
+		pathname = pathname[len(options.OrgPrefix):]
 
 		path := strings.Split(pathname, "/")
 		if len(path) == 1 {
@@ -40,9 +40,9 @@ func ParseRepo(c *Config, pathname string) (RepoLookup, error) {
 		return nil, ErrInvalidRepoFormat
 	}
 
-	if strings.HasPrefix(pathname, c.UserPrefix) {
+	if strings.HasPrefix(pathname, options.UserPrefix) {
 		// Strip off the org prefix and continue parsing
-		pathname = pathname[len(c.UserPrefix):]
+		pathname = pathname[len(options.UserPrefix):]
 
 		path := strings.Split(pathname, "/")
 		if len(path) == 1 {
