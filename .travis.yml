@@ -7,6 +7,7 @@ env:
 
 before_install:
   - GO111MODULE=off go get -u github.com/Quasilyte/go-consistent
+  - GO111MODULE=off go get -u golang.org/x/lint/golint
   - curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(go env GOPATH)/bin v1.21.0
 
 script:
