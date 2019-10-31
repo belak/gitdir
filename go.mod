@@ -1,4 +1,4 @@
-module github.com/belak/go-code
+module github.com/belak/go-gitdir
 
 go 1.13
 
