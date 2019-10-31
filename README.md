@@ -37,7 +37,8 @@ Runtime requirements:
 
 ## Building
 
-From the root of the source tree, run:
+Clone the repository somewhere, outside the GOPATH. Then, from the root of the
+source tree, run:
 
 ```
 go build
