@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"crypto"
-	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -12,6 +11,7 @@ import (
 	"io/ioutil"
 
 	"github.com/gliderlabs/ssh"
+	"golang.org/x/crypto/ed25519"
 	gossh "golang.org/x/crypto/ssh"
 )
 
@@ -104,9 +104,11 @@ func ParseEd25519Key(data []byte) (PrivateKey, error) {
 		return nil, err
 	}
 
+	// Try loading as an external key, fall back to internal key. This *should*
+	// fix issues with incompatible versions.
 	ed25519Key, ok := privateKey.(ed25519.PrivateKey)
 	if !ok {
-		return nil, errors.New("id_ed25519 not an RSA key")
+		return nil, errors.New("not an ed25519 key")
 	}
 
 	return &ed25519PrivateKey{ed25519Key}, nil
