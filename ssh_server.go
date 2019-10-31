@@ -232,8 +232,8 @@ func (serv *Server) handleSession(s ssh.Session) {
 
 	defer func() {
 		// Note that we can't pass in slog as an argument because that would
-		// result in the value getting captured and we want to be able to update
-		// this.
+		// result in the value getting captured and we want to be able to
+		// annotate this with new values.
 		handlePanic(slog)
 	}()
 
