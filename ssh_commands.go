@@ -1,4 +1,4 @@
-package main
+package gitdir
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/gliderlabs/ssh"
+
+	"github.com/belak/go-gitdir/internal/git"
 )
 
 func cmdWhoami(ctx context.Context, s ssh.Session, cmd []string) int { //nolint:interfacer
@@ -27,7 +29,7 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 		return 1
 	}
 
-	log, settings, user := CtxExtract(ctx)
+	log, user := CtxExtract(ctx)
 
 	// Sanitize the repo name
 	//   - Trim all slashes from beginning and end
@@ -37,27 +39,23 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 	//   - Sanitize the name
 	repoName := sanitize(path.Clean("/" + strings.Trim(cmd[1], "/"))[1:])
 
-	repo, err := ParseRepo(&settings.Options, repoName)
+	// Repo does not exist and permission checks should give the same error, so
+	// information about what repos are defined is not leaked.
+	repo, err := serv.LookupRepoAccess(user, repoName)
 	if err != nil {
-		_ = writeStringFmt(s.Stderr(), "Invalid repo format\r\n")
-		return -1
-	}
-
-	if !repo.IsValid(settings) {
 		_ = writeStringFmt(s.Stderr(), "Repo does not exist\r\n")
 		return -1
 	}
 
-	if !repo.UserHasAccess(settings, user, access) {
-		_ = writeStringFmt(s.Stderr(), "Permission denied\r\n")
+	if repo.Access < access {
+		_ = writeStringFmt(s.Stderr(), "Repo does not exist\r\n")
 		return -1
 	}
 
-	// If implicit repos are enabled and the user has admin access to this
-	// location, go ahead and create it. All explicitly defined repos should be
-	// created when the config is loaded.
-	if settings.Options.ImplicitRepos && repo.UserHasAccess(settings, user, AccessTypeAdmin) {
-		_, err = EnsureRepo(repo.Path(), false)
+	// Because we check ImplicitRepos earlier, if they have admin access, it's
+	// safe to ensure this repo exists.
+	if repo.Access >= AccessTypeAdmin {
+		_, err = git.EnsureRepo(repo.Path(), false)
 		if err != nil {
 			return -1
 		}
@@ -67,8 +65,8 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 
 	// Reload the server config if a config repo was changed.
 	if access == AccessTypeWrite {
-		switch repo.(type) {
-		case *repoLookupAdmin, *repoLookupOrgConfig, *repoLookupUserConfig:
+		switch repo.Type {
+		case RepoTypeAdmin, RepoTypeOrgConfig, RepoTypeUserConfig:
 			err = serv.Reload()
 			if err != nil {
 				_ = writeStringFmt(s.Stderr(), "Error when reloading config: %s\r\n", err)
