@@ -1,6 +1,7 @@
 # go-gitdir
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/belak/go-gitdir)](https://goreportcard.com/report/github.com/belak/go-gitdir) [![Build Status](https://travis-ci.org/belak/go-gitdir.svg?branch=master)](https://travis-ci.org/belak/go-gitdir)
+[![Go Report Card](https://goreportcard.com/badge/github.com/belak/go-gitdir)](https://goreportcard.com/report/github.com/belak/go-gitdir)
+[![Build Status](https://travis-ci.org/belak/go-gitdir.svg?branch=master)](https://travis-ci.org/belak/go-gitdir)
 
 This project makes it incredibly easy to host a secure git server with a config
 that can be easily rolled back.
@@ -92,13 +93,6 @@ On first run, go-git-dir will push a commit to the admin repo with a sample
 config as well as generated server ssh keys. These can be updated at any time
 (even at runtime) but if the server restarts and the keys cannot be loaded, they
 will be re-generated.
-
-Note that you will also need to add a user. The following command is a
-convenience for adding a user to the admin config.
-
-```
-$ go-gitdir --base-dir=/tmp/git add-user --username=belak --pubkey=$HOME/.ssh/id_rsa.pub
-```
 
 Note that you will need to manually clone the admin repository (at
 `$GITDIR_BASE_DIR/admin/admin`) to add a user to `config.yml` and set them as an

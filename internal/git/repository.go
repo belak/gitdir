@@ -1,4 +1,4 @@
-package main
+package git
 
 import (
 	"io/ioutil"
@@ -14,13 +14,13 @@ import (
 	"gopkg.in/src-d/go-git.v4/storage/filesystem"
 )
 
-// WorkingRepo is a fairly lightweight wrapper designed to attach a worktree to
-// a git repository so we don't have to muck about with the raw git objects.
+// Repository is a fairly lightweight wrapper designed to attach a worktree to a
+// git repository so we don't have to muck about with the raw git objects.
 //
 // We keep the worktree separate from the repo so we can still have a bare repo.
 // This also lets us do fun things like keep the worktree in memory if we really
 // want to.
-type WorkingRepo struct {
+type Repository struct {
 	Repo       *git.Repository
 	Worktree   *git.Worktree
 	WorktreeFS billy.Filesystem
@@ -29,8 +29,9 @@ type WorkingRepo struct {
 // EnsureRepo will open a repository if it exists and try to create it if it
 // doesn't. runCheckout allows you to skip the checkout of the files in the
 // repo.
-func EnsureRepo(path string, runCheckout bool) (*WorkingRepo, error) {
-	fs := osfs.New(path)
+func EnsureRepo(path string, runCheckout bool) (*Repository, error) {
+	// TODO: if .git doesn't exist, but without does, just use that?
+	fs := osfs.New(path + ".git")
 
 	// TODO: this probably shouldn't be memfs.
 	worktreeFS := memfs.New()
@@ -73,7 +74,7 @@ func EnsureRepo(path string, runCheckout bool) (*WorkingRepo, error) {
 		}
 	}
 
-	return &WorkingRepo{
+	return &Repository{
 		Repo:       repo,
 		Worktree:   worktree,
 		WorktreeFS: worktreeFS,
@@ -81,7 +82,7 @@ func EnsureRepo(path string, runCheckout bool) (*WorkingRepo, error) {
 }
 
 // GetFile is a convenience method to get the contents of a file in the repo.
-func (wr *WorkingRepo) GetFile(filename string) ([]byte, error) {
+func (wr *Repository) GetFile(filename string) ([]byte, error) {
 	f, err := wr.WorktreeFS.Open(filename)
 	if err != nil {
 		return nil, err
@@ -90,9 +91,31 @@ func (wr *WorkingRepo) GetFile(filename string) ([]byte, error) {
 	return ioutil.ReadAll(f)
 }
 
+// FileExists returns true if the given path exists and is a regular file in the
+// repository worktree.
+func (wr *Repository) FileExists(filename string) bool {
+	stat, err := wr.WorktreeFS.Stat(filename)
+	if err != nil {
+		return false
+	}
+
+	return stat.Mode().IsRegular()
+}
+
+// DirExists returns true if the given path exists and is a directory in the
+// repository worktree.
+func (wr *Repository) DirExists(filename string) bool {
+	stat, err := wr.WorktreeFS.Stat(filename)
+	if err != nil {
+		return false
+	}
+
+	return stat.Mode().IsDir()
+}
+
 // CreateFile is a convenience method to set the contents of a file in the
 // repo and stage it.
-func (wr *WorkingRepo) CreateFile(filename string, data []byte) error {
+func (wr *Repository) CreateFile(filename string, data []byte) error {
 	f, err := wr.WorktreeFS.Create(filename)
 	if err != nil {
 		return err
@@ -111,7 +134,7 @@ func (wr *WorkingRepo) CreateFile(filename string, data []byte) error {
 // UpdateFile is a convenience method to get the contents of a file, pass it
 // to a callback, write the contents back to the file if no error was
 // returned, and stage the file.
-func (wr *WorkingRepo) UpdateFile(filename string, cb func([]byte) ([]byte, error)) error {
+func (wr *Repository) UpdateFile(filename string, cb func([]byte) ([]byte, error)) error {
 	data, _ := wr.GetFile(filename)
 
 	data, err := cb(data)
@@ -124,7 +147,7 @@ func (wr *WorkingRepo) UpdateFile(filename string, cb func([]byte) ([]byte, erro
 
 // Commit is a convenience method to make working with the worktree a little
 // bit easier.
-func (wr *WorkingRepo) Commit(msg string, author *object.Signature) error {
+func (wr *Repository) Commit(msg string, author *object.Signature) error {
 	if author == nil {
 		author = newAdminGitSignature()
 	}

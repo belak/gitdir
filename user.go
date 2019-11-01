@@ -1,7 +1,10 @@
-package main
+package gitdir
 
 import (
 	"errors"
+
+	"github.com/belak/go-gitdir/models"
+	"github.com/rs/zerolog/log"
 )
 
 // User is the internal representation of a user. This data is copied from the
@@ -18,39 +21,54 @@ var AnonymousUser = &User{
 	IsAnonymous: true,
 }
 
-// GetUserFromKey looks up a user object given their PublicKey.
-func (ac *AdminConfig) GetUserFromKey(pk PublicKey) (*User, error) {
-	usernames, ok := ac.PublicKeys[pk.RawMarshalAuthorizedKey()]
+// ErrUserNotFound is returned from LookupUser commands when
+var ErrUserNotFound = errors.New("user not found")
+
+// LookupUserFromKey looks up a user object given their PublicKey.
+func (serv *Server) LookupUserFromKey(pk models.PublicKey, remoteUser string) (*User, error) {
+	serv.lock.RLock()
+	defer serv.lock.RUnlock()
+
+	username, ok := serv.publicKeys[pk.RawMarshalAuthorizedKey()]
 	if !ok {
-		return AnonymousUser, errors.New("key does not match a user")
+		log.Warn().Msg("key does not exist")
+		return AnonymousUser, ErrUserNotFound
 	}
 
-	if len(usernames) != 1 {
-		return AnonymousUser, errors.New("key matches multiple users")
+	userConfig, ok := serv.settings.Users[username]
+	if !ok {
+		log.Warn().Msg("key does not match a user")
+		return AnonymousUser, ErrUserNotFound
 	}
 
-	userConfig, ok := ac.Users[usernames[0]]
-	if !ok {
-		return AnonymousUser, errors.New("key does not match a user")
+	// If they weren't the git user make sure their username matches their key.
+	if remoteUser != serv.settings.Options.GitUser && remoteUser != username {
+		log.Warn().Msg("key belongs to different user")
+		return AnonymousUser, ErrUserNotFound
 	}
 
 	return &User{
-		Username:    usernames[0],
+		Username:    username,
 		IsAnonymous: false,
 		IsAdmin:     userConfig.IsAdmin,
 	}, nil
 }
 
-// GetUserFromInvite looks up a user object given an invite code.
-func (ac *AdminConfig) GetUserFromInvite(invite string) (*User, error) {
-	username, ok := ac.Invites[invite]
+// LookupUserFromInvite looks up a user object given an invite code.
+func (serv *Server) LookupUserFromInvite(invite string) (*User, error) {
+	serv.lock.RLock()
+	defer serv.lock.RUnlock()
+
+	username, ok := serv.settings.Invites[invite]
 	if !ok {
-		return AnonymousUser, errors.New("invite does not match a user")
+		log.Warn().Msg("invite does not exist")
+		return AnonymousUser, ErrUserNotFound
 	}
 
-	userConfig, ok := ac.Users[username]
+	userConfig, ok := serv.settings.Users[username]
 	if !ok {
-		return AnonymousUser, errors.New("invite does not match a user")
+		log.Warn().Msg("invite does not match a user")
+		return AnonymousUser, ErrUserNotFound
 	}
 
 	return &User{

@@ -1,7 +1,8 @@
-package main
+package gitdir
 
 import (
-	yaml "gopkg.in/yaml.v3"
+	"github.com/belak/go-gitdir/internal/yaml"
+	"github.com/belak/go-gitdir/models"
 )
 
 func ensureSampleConfig(data []byte) ([]byte, error) {
@@ -14,11 +15,11 @@ func ensureSampleConfig(data []byte) ([]byte, error) {
 		return data, nil
 	}
 
-	return yamlEncode(rootNode)
+	return rootNode.Encode()
 }
 
 func ensureSampleConfigYaml(data []byte) (*yaml.Node, bool, error) {
-	rootNode, targetNode, err := yamlEnsureDocument(data)
+	rootNode, targetNode, err := yaml.EnsureDocument(data)
 	if err != nil {
 		return nil, false, err
 	}
@@ -41,11 +42,11 @@ func ensureSampleConfigYaml(data []byte) (*yaml.Node, bool, error) {
 }
 
 func ensureSampleInvites(targetNode *yaml.Node) bool {
-	_, modified := yamlEnsureKey(
-		targetNode,
+	_, modified := targetNode.EnsureKey(
 		"invites",
-		&yaml.Node{Kind: yaml.MappingNode},
-		`
+		yaml.NewMappingNode(),
+		&yaml.EnsureOptions{
+			Comment: `
 Invites define temporary codes for a user to get in to the service. They
 can SSH in using ssh invite:invite-code@go-code and it will add that public
 key to their user.
@@ -54,18 +55,18 @@ Sample invites:
 #
 invites:
   orai7Quaipoocungah1vee6Ieh8Ien: belak`,
-		false,
+		},
 	)
 
 	return modified
 }
 
 func ensureSampleUsers(targetNode *yaml.Node) bool {
-	_, modified := yamlEnsureKey(
-		targetNode,
+	_, modified := targetNode.EnsureKey(
 		"users",
-		&yaml.Node{Kind: yaml.MappingNode},
-		`
+		yaml.NewMappingNode(),
+		&yaml.EnsureOptions{
+			Comment: `
 Users defines the users who have access to the service. They will need an
 SSH key or invite added to their user account before they can access the
 server.
@@ -77,18 +78,18 @@ belak:
   disabled: false
   keys:
     - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDeQfBUWIqpGXS8xCOg/0RKVOGTnzpIdL7r9wK1/xA52 belak@tmp`,
-		false,
+		},
 	)
 
 	return modified
 }
 
 func ensureSampleGroups(targetNode *yaml.Node) bool {
-	_, modified := yamlEnsureKey(
-		targetNode,
+	_, modified := targetNode.EnsureKey(
 		"groups",
-		&yaml.Node{Kind: yaml.MappingNode},
-		`
+		yaml.NewMappingNode(),
+		&yaml.EnsureOptions{
+			Comment: `
 Groups can be used in any place a normal user could be used. They are prefixed
 with a $, so the admins group could be accessed with $admins. Groups can be
 defined recursively, but they cannot have loops.
@@ -102,18 +103,18 @@ groups:
   vault-members:
 	- $admins
 	- some-less-trusted-user`,
-		false,
+		},
 	)
 
 	return modified
 }
 
 func ensureSampleOrgs(targetNode *yaml.Node) bool {
-	_, modified := yamlEnsureKey(
-		targetNode,
+	_, modified := targetNode.EnsureKey(
 		"orgs",
-		&yaml.Node{Kind: yaml.MappingNode},
-		`
+		yaml.NewMappingNode(),
+		&yaml.EnsureOptions{
+			Comment: `
 Org repos are accessible at @org-name/repo. Note that if admins is not
 specified, the only users with admin access will be global admins. By
 default, all members of an org will have read-write access to repos. This
@@ -123,20 +124,20 @@ Sample org (with all options set):
 #
 vault:
   admins:
-	- belak
+    - belak
   write:
     - some user
   read:
-	- some-other-user
+    - some-other-user
   repos:
-	project-name-here:
-	  public: false
-	  write:
-	    - belak
-	  read:
-		- some-user
-		- some-other-user`,
-		false,
+    project-name-here:
+      public: false
+    write:
+      - belak
+    read:
+      - some-user
+      - some-other-user`,
+		},
 	)
 
 	return modified
@@ -146,28 +147,28 @@ vault:
 var sampleOptions = []struct {
 	Name    string
 	Comment string
-	Tag     string
+	Tag     yaml.ScalarTag
 	Value   string
 }{
 	{
 		Name:    "git_user",
 		Comment: "which username to use as the global git user",
-		Value:   defaultAdminOptions.GitUser,
+		Value:   models.DefaultAdminConfigOptions.GitUser,
 	},
 	{
 		Name:    "org_prefix",
 		Comment: "the prefix to use when cloning org repos",
-		Value:   defaultAdminOptions.OrgPrefix,
+		Value:   models.DefaultAdminConfigOptions.OrgPrefix,
 	},
 	{
 		Name:    "user_prefix",
 		Comment: "the prefix to use when cloning user repos",
-		Value:   defaultAdminOptions.UserPrefix,
+		Value:   models.DefaultAdminConfigOptions.UserPrefix,
 	},
 	{
 		Name:    "invite_prefix",
 		Comment: "the prefix to use when sshing in with an invite",
-		Value:   defaultAdminOptions.InvitePrefix,
+		Value:   models.DefaultAdminConfigOptions.InvitePrefix,
 	},
 	{
 		Name: "implicit_repos",
@@ -200,26 +201,18 @@ relying on the main admin config.`,
 }
 
 func ensureSampleOptions(targetNode *yaml.Node) bool {
-	optionsVal, modified := yamlEnsureKey(
-		targetNode,
+	optionsVal, modified := targetNode.EnsureKey(
 		"options",
-		&yaml.Node{Kind: yaml.MappingNode},
-		"",
-		false,
+		yaml.NewMappingNode(),
+		nil,
 	)
 
 	// Ensure all our options are on the options struct.
 	for _, opt := range sampleOptions {
-		_, added := yamlEnsureKey(
-			optionsVal,
+		_, added := optionsVal.EnsureKey(
 			opt.Name,
-			&yaml.Node{
-				Kind:  yaml.ScalarNode,
-				Tag:   opt.Tag,
-				Value: opt.Value,
-			},
-			opt.Comment,
-			false,
+			yaml.NewScalarNode(opt.Value, opt.Tag),
+			&yaml.EnsureOptions{Comment: opt.Comment},
 		)
 
 		modified = modified || added

@@ -1,219 +1,161 @@
-package main
+package gitdir
 
 import (
-	"path"
+	"strings"
+
+	"github.com/rs/zerolog/log"
 )
 
-// AccessType represents the type of access being requested for a repository.
+// AccessType represents the level of access being requested and the level of
+// access a user has.
 type AccessType int
 
-// Each AccessType represents Read, Write, or Admin permissions on a
-// repository.
+// AccessType defaults to AccessTypeNone for security. A repo lookup returns the
+// level of permissions a user has and if it's not explicitly set, they don't
+// have any.
 const (
-	AccessTypeRead AccessType = iota
+	AccessTypeNone AccessType = iota
+	AccessTypeRead
 	AccessTypeWrite
 	AccessTypeAdmin
 )
 
-func genericUserHasAccess(rc RepoConfig, u *User, a AccessType) bool {
-	if u.IsAdmin {
-		return true
-	}
+func (serv *Server) doesGroupContainUser(user *User, groupName string, groupPath []string) bool {
+	groupPath = append(groupPath, groupName)
 
-	// If they're trying to read the repository and the repo config is public,
-	// they're allowed to access it.
-	if a == AccessTypeRead && rc.Public {
-		return true
-	}
+	for _, lookup := range serv.settings.Groups[groupName] {
+		if strings.HasPrefix(lookup, "$") {
+			intGroupName := lookup[1:]
 
-	// If a write user is requesting write or below, they can access the repo
-	if listContains(rc.Write, u.Username) && a <= AccessTypeWrite {
-		return true
-	}
+			// Group loop - this should never be possible in a checked config.
+			if intGroupName == groupName {
+				log.Warn().Strs("groups", groupPath).Msg("group loop")
+				return false
+			}
 
-	// If a read user is requesting read or below, they can access the repo
-	if listContains(rc.Read, u.Username) && a <= AccessTypeRead {
-		return true
+			if serv.doesGroupContainUser(user, intGroupName, groupPath) {
+				return true
+			}
+		}
+
+		if lookup == user.Username {
+			return true
+		}
 	}
 
 	return false
 }
 
-// repoLookupAdmin represents the admin repo (admin)
-type repoLookupAdmin struct{}
-
-func (rl repoLookupAdmin) Path() string {
-	return path.Join("admin", "admin")
-}
-
-func (rl repoLookupAdmin) IsValid(c *AdminConfig) bool {
-	return true
-}
-
-func (rl repoLookupAdmin) UserHasAccess(c *AdminConfig, u *User, a AccessType) bool {
-	// Only admin users have access to the admin repo.
-	return u.IsAdmin
-}
-
-// repoLookupTopLevel represents a top-level repo (repo)
-type repoLookupTopLevel struct {
-	Name string
-}
-
-func (rl repoLookupTopLevel) Path() string {
-	return path.Join("top-level", rl.Name)
-}
-
-func (rl repoLookupTopLevel) IsValid(c *AdminConfig) bool {
-	// A top level repo is valid if the repo is defined.
-	_, ok := c.Repos[rl.Name]
-	return ok
-}
-
-func (rl repoLookupTopLevel) UserHasAccess(c *AdminConfig, u *User, a AccessType) bool {
-	return genericUserHasAccess(c.Repos[rl.Name], u, a)
-}
-
-// repoLookupUserConfig represents a user config repo (~user)
-type repoLookupUserConfig struct {
-	User string
-}
-
-func (rl repoLookupUserConfig) Path() string {
-	return path.Join("admin", "user-"+rl.User)
-}
-
-func (rl repoLookupUserConfig) IsValid(c *AdminConfig) bool {
-	// A user config repo is valid if the user exists and is not disabled.
-	user, ok := c.Users[rl.User]
-	if !ok {
-		return false
+func (serv *Server) checkListsForUser(user *User, userLists ...[]string) bool {
+	for _, list := range userLists {
+		for _, lookup := range list {
+			if strings.HasPrefix(lookup, "$") {
+				if serv.doesGroupContainUser(user, lookup[1:], nil) {
+					return true
+				}
+			} else {
+				if lookup == user.Username {
+					return true
+				}
+			}
+		}
 	}
 
-	return !user.Disabled
+	return false
 }
 
-func (rl repoLookupUserConfig) UserHasAccess(c *AdminConfig, u *User, a AccessType) bool {
-	if u.IsAdmin {
-		return true
+// TODO: clean up nolint here
+func (serv *Server) checkUserRepoAccess(user *User, repo *RepoLookup) AccessType { //nolint:funlen
+	// Admins always have access to everything.
+	if user.IsAdmin {
+		return AccessTypeAdmin
 	}
 
-	return u.Username == rl.User
-}
+	switch repo.Type {
+	case RepoTypeAdmin:
+		// If we made it this far, they're not an admin, so they don't have
+		// access.
+		return AccessTypeNone
+	case RepoTypeOrgConfig:
+		org := serv.settings.Orgs[repo.PathParts[0]]
+		if serv.checkListsForUser(user, org.Admin) {
+			return AccessTypeAdmin
+		}
 
-// repoLookupUser represents a user repo (~user/repo)
-type repoLookupUser struct {
-	User string
-	Name string
-}
+		return AccessTypeNone
+	case RepoTypeOrg:
+		org := serv.settings.Orgs[repo.PathParts[0]]
 
-func (rl repoLookupUser) Path() string {
-	return path.Join("users", rl.User, rl.Name)
-}
+		// Because we already checked to see if this repo exists, this user has
+		// admin on the repo if they're an org admin.
+		if serv.checkListsForUser(user, org.Admin) {
+			return AccessTypeAdmin
+		}
 
-func (rl repoLookupUser) IsValid(c *AdminConfig) bool {
-	// A user repo is valid if the user exists and the repo is defined.
-	user, ok := c.Users[rl.User]
-	if !ok {
-		return false
+		repo := org.Repos[repo.PathParts[1]]
+		if repo == nil {
+			// If this is an implicitly created repo, we can only check the org
+			// level permissions.
+			if serv.settings.Options.ImplicitRepos {
+				switch {
+				case serv.checkListsForUser(user, org.Write):
+					return AccessTypeWrite
+				case serv.checkListsForUser(user, org.Read):
+					return AccessTypeRead
+				}
+			}
+		}
+
+		switch {
+		case serv.checkListsForUser(user, org.Write, repo.Write):
+			return AccessTypeWrite
+		case serv.checkListsForUser(user, org.Read, repo.Read):
+			return AccessTypeRead
+		}
+
+		return AccessTypeNone
+	case RepoTypeUserConfig:
+		if repo.PathParts[0] == user.Username {
+			return AccessTypeAdmin
+		}
+
+		return AccessTypeNone
+	case RepoTypeUser:
+		// Because we already checked to see if this repo exists, the user has
+		// admin on the repo if they own the repo.
+		if repo.PathParts[0] == user.Username {
+			return AccessTypeAdmin
+		}
+
+		userConfig := serv.settings.Users[repo.PathParts[0]]
+		repo := userConfig.Repos[repo.PathParts[1]]
+
+		// Only the given user has access to implicit repos, so if the repo
+		// isn't explicitly defined, noone else has access.
+		if repo == nil {
+			return AccessTypeNone
+		}
+
+		switch {
+		case serv.checkListsForUser(user, repo.Write):
+			return AccessTypeWrite
+		case serv.checkListsForUser(user, repo.Read):
+			return AccessTypeRead
+		}
+	case RepoTypeTopLevel:
+		repo := serv.settings.Repos[repo.PathParts[0]]
+		if repo == nil {
+			// Only admins have access to implicitly created top-level repos.
+			return AccessTypeNone
+		}
+
+		switch {
+		case serv.checkListsForUser(user, repo.Write):
+			return AccessTypeWrite
+		case serv.checkListsForUser(user, repo.Read):
+			return AccessTypeRead
+		}
 	}
 
-	// If we allow implicit repos, it doesn't matter if the repo actually
-	// exists.
-	if c.Options.ImplicitRepos {
-		return true
-	}
-
-	_, ok = user.Repos[rl.Name]
-
-	return ok
-}
-
-func (rl repoLookupUser) UserHasAccess(c *AdminConfig, u *User, a AccessType) bool {
-	if u.IsAdmin {
-		return true
-	}
-
-	if u.Username == rl.User {
-		return true
-	}
-
-	return genericUserHasAccess(c.Users[rl.User].Repos[rl.Name], u, a)
-}
-
-// repoLookupOrgConfig represents an org config repo (@org)
-type repoLookupOrgConfig struct {
-	Org string
-}
-
-func (rl repoLookupOrgConfig) Path() string {
-	return path.Join("admin", "org-"+rl.Org)
-}
-
-func (rl repoLookupOrgConfig) IsValid(c *AdminConfig) bool {
-	// A org config repo is valid if the org exists.
-	_, ok := c.Orgs[rl.Org]
-	return ok
-}
-
-func (rl repoLookupOrgConfig) UserHasAccess(c *AdminConfig, u *User, a AccessType) bool {
-	if u.IsAdmin {
-		return true
-	}
-
-	return listContains(c.Orgs[rl.Org].Admin, u.Username)
-}
-
-// repoLookupOrg represents an org repo (@org/repo)
-type repoLookupOrg struct {
-	Org  string
-	Name string
-}
-
-func (rl repoLookupOrg) Path() string {
-	return path.Join("orgs", rl.Org, rl.Name)
-}
-
-func (rl repoLookupOrg) IsValid(c *AdminConfig) bool {
-	// A org repo is valid if the org exists and the repo is defined.
-	org, ok := c.Orgs[rl.Org]
-	if !ok {
-		return false
-	}
-
-	// If we allow implicit repos, it doesn't matter if the repo actually
-	// exists.
-	if c.Options.ImplicitRepos {
-		return true
-	}
-
-	_, ok = org.Repos[rl.Name]
-
-	return ok
-}
-
-func (rl repoLookupOrg) UserHasAccess(c *AdminConfig, u *User, a AccessType) bool {
-	if u.IsAdmin {
-		return true
-	}
-
-	org := c.Orgs[rl.Org]
-
-	// If an org admin user is requesting admin or below, they can access the repo.
-	if listContains(org.Admin, u.Username) && a <= AccessTypeAdmin {
-		return true
-	}
-
-	// If an org write user is requesting write or below, they can access the repo.
-	if listContains(org.Write, u.Username) && a <= AccessTypeWrite {
-		return true
-	}
-
-	// If a org read user is requesting read or below, they can access the repo.
-	if listContains(org.Read, u.Username) && a <= AccessTypeRead {
-		return true
-	}
-
-	// Fall back to generic repo permission check.
-	return genericUserHasAccess(org.Repos[rl.Name], u, a)
+	return AccessTypeNone
 }

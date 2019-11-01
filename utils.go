@@ -1,4 +1,4 @@
-package main
+package gitdir
 
 import (
 	"fmt"
@@ -7,104 +7,10 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/gliderlabs/ssh"
 	"github.com/rs/zerolog"
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
-	yaml "gopkg.in/yaml.v3"
 )
-
-func loadConfig(repoPath string, target interface{}) error {
-	repo, err := EnsureRepo(repoPath, true)
-	if err != nil {
-		return err
-	}
-
-	data, err := repo.GetFile("config.yml")
-	if err != nil {
-		return err
-	}
-
-	return yaml.Unmarshal(data, target)
-}
-
-func newAdminGitSignature() *object.Signature {
-	return &object.Signature{
-		Name:  "root",
-		Email: "root@localhost",
-		When:  time.Now(),
-	}
-}
-
-func expandGroups(groups map[string][]string, users []string) []string {
-	out := []string{}
-
-	for _, user := range users {
-		if strings.HasPrefix(user, "$") {
-			out = append(out, groups[user[1:]]...)
-		} else {
-			out = append(out, user)
-		}
-	}
-
-	return sliceUniqMap(out)
-}
-
-// groupMembers recursively finds all members of the given group
-func groupMembers(groups map[string][]string, groupName string, groupPath []string) ([]string, error) {
-	out := []string{}
-
-	if listContains(groupPath, groupName) {
-		return nil, fmt.Errorf("found group loop: %s", strings.Join(groupPath, ", "))
-	}
-
-	groupPath = append(groupPath, groupName)
-
-	for _, user := range groups[groupName] {
-		if strings.HasPrefix(user, "$") {
-			nested, err := groupMembers(groups, user[1:], groupPath)
-			if err != nil {
-				return nil, err
-			}
-
-			out = append(out, nested...)
-		} else {
-			out = append(out, user)
-		}
-	}
-
-	// Ensure we're always returning the smallest version of this list that we
-	// can.
-	return sliceUniqMap(out), nil
-}
-
-func sliceUniqMap(s []string) []string {
-	seen := make(map[string]struct{}, len(s))
-	j := 0
-
-	for _, v := range s {
-		if _, ok := seen[v]; ok {
-			continue
-		}
-
-		seen[v] = struct{}{}
-		s[j] = v
-		j++
-	}
-
-	return s[:j]
-}
-
-func listContains(list []string, s string) bool {
-	for _, item := range list {
-		if item == s {
-			return true
-		}
-	}
-
-	return false
-}
 
 func handlePanic(logger *zerolog.Logger) {
 	if r := recover(); r != nil {

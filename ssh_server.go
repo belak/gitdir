@@ -1,15 +1,13 @@
-package main
+package gitdir
 
 import (
-	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/gliderlabs/ssh"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	gossh "golang.org/x/crypto/ssh"
-	yaml "gopkg.in/yaml.v3"
+
+	"github.com/belak/go-gitdir/models"
 )
 
 // Server represents a gitdir server.
@@ -19,8 +17,12 @@ type Server struct {
 	c    *Config
 
 	// Internal state
-	log      zerolog.Logger
-	settings *AdminConfig
+	log zerolog.Logger
+
+	settings   *models.AdminConfig
+	users      map[string]*models.UserConfig
+	orgs       map[string]*models.OrgConfig
+	publicKeys map[string]string
 }
 
 // NewServer configures a new gitdir server and attempts to load the config
@@ -32,6 +34,10 @@ func NewServer(c *Config) (*Server, error) {
 		lock: &sync.RWMutex{},
 		log:  log.Logger,
 		c:    c,
+
+		users:      make(map[string]*models.UserConfig),
+		orgs:       make(map[string]*models.OrgConfig),
+		publicKeys: make(map[string]string),
 	}
 
 	serv.s = &ssh.Server{
@@ -49,123 +55,12 @@ func NewServer(c *Config) (*Server, error) {
 	return serv, nil
 }
 
-// GetAdminConfig returns the currently in use version of the AdminConfig in a
-// thread-safe way.
-func (serv *Server) GetAdminConfig() *AdminConfig {
-	serv.lock.RLock()
-	defer serv.lock.RUnlock()
-
-	return serv.settings
-}
-
-// AcceptInvite attempts to accept an invite and set up the given user.
-func (serv *Server) AcceptInvite(invite string, key PublicKey) bool { //nolint:funlen
-	serv.lock.Lock()
-	defer serv.lock.Unlock()
-
-	// It's expensive to lock, so we need to do the fast stuff first and bail as
-	// early as possible if it's not valid.
-
-	// Step 1: Look up the invite
-	username, ok := serv.settings.Invites[invite]
-	if !ok {
-		return false
-	}
-
-	fmt.Println("found user")
-
-	adminRepo, err := EnsureRepo("admin/admin", true)
-	if err != nil {
-		log.Warn().Err(err).Msg("Admin repo doesn't exist")
-		return false
-	}
-
-	err = adminRepo.UpdateFile("config.yml", func(data []byte) ([]byte, error) {
-		rootNode, _, err := ensureSampleConfigYaml(data) //nolint:govet
-		if err != nil {
-			return nil, err
-		}
-
-		// We can assume the config file is in a valid format because of
-		// ensureSampleConfig
-		targetNode := rootNode.Content[0]
-
-		// Step 2: Ensure the user exists and is not disabled.
-		usersVal := yamlLookupVal(targetNode, "users")
-		userVal, _ := yamlEnsureKey(usersVal, username, &yaml.Node{Kind: yaml.MappingNode}, "", false)
-		_ = yamlRemoveKey(userVal, "disabled")
-
-		// Step 3: Add the key to the user
-		keysVal, _ := yamlEnsureKey(userVal, "keys", &yaml.Node{Kind: yaml.SequenceNode}, "", false)
-		keysVal.Content = append(keysVal.Content, &yaml.Node{
-			Kind:  yaml.ScalarNode,
-			Value: key.MarshalAuthorizedKey(),
-		})
-
-		// Step 4: Remove the invite (and any others this user owns)
-		var staleInvites []string
-		invitesVal := yamlLookupVal(targetNode, "invites")
-
-		for i := 0; i+1 < len(invitesVal.Content); i += 2 {
-			if invitesVal.Content[i+1].Value == username {
-				staleInvites = append(staleInvites, invitesVal.Content[i].Value)
-			}
-		}
-
-		for _, val := range staleInvites {
-			yamlRemoveKey(invitesVal, val)
-		}
-
-		// Step 5: Re-encode back to yaml
-		data, err = yamlEncode(rootNode)
-		return data, err
-	})
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to update config")
-		return false
-	}
-
-	err = adminRepo.Commit("Added "+username+" from invite "+invite, nil)
-	if err != nil {
-		return false
-	}
-
-	err = serv.reloadInternal()
-
-	// The invite was successfully accepted if the server reloaded properly.
-	return err == nil
-}
-
 // Reload reloads the server config in a thread-safe way.
 func (serv *Server) Reload() error {
 	serv.lock.Lock()
 	defer serv.lock.Unlock()
 
 	return serv.reloadInternal()
-}
-
-func (serv *Server) reloadInternal() error {
-	log.Info().Msg("Reloading")
-
-	var err error
-
-	var pks []PrivateKey
-
-	serv.settings, pks, err = LoadAdminConfig()
-	if err != nil {
-		return err
-	}
-
-	for _, key := range pks {
-		signer, err := gossh.NewSignerFromSigner(key)
-		if err != nil {
-			return err
-		}
-
-		serv.s.AddHostKey(signer)
-	}
-
-	return nil
 }
 
 // ListenAndServe listens on the BindAddr given in the config.
@@ -180,45 +75,32 @@ func (serv *Server) handlePublicKey(ctx ssh.Context, incomingKey ssh.PublicKey) 
 		Str("remote_user", ctx.User()).
 		Str("remote_addr", ctx.RemoteAddr().String()).Logger()
 
-	// Pull the admin config so we can use it when we need it. This will serve
-	// as an anchor point, so if the server reloads, we need to keep the old
-	// config in place.
-	//
-	// NOTE: if the user has a long-lived connection and the settings change out
-	// from under the user, the connection should be cycled.
-	settings := serv.GetAdminConfig()
-
 	remoteUser := ctx.User()
 
-	if strings.HasPrefix(remoteUser, settings.Options.InvitePrefix) {
-		invite := remoteUser[len(settings.Options.InvitePrefix):]
+	/*
+		if strings.HasPrefix(remoteUser, settings.Options.InvitePrefix) {
+			invite := remoteUser[len(settings.Options.InvitePrefix):]
 
-		// Try to accept the invite. If this fails, bail out. Otherwise,
-		// continue looking up the user as normal.
-		if ok := serv.AcceptInvite(invite, PublicKey{incomingKey, ""}); !ok {
-			return false
+			// Try to accept the invite. If this fails, bail out. Otherwise,
+			// continue looking up the user as normal.
+			if ok := serv.AcceptInvite(invite, models.PublicKey{incomingKey, ""}); !ok {
+				return false
+			}
+
+			// If it succeeded, we actually need to pull the refreshed admin config
+			// so the new user shows up.
+			settings = serv.GetAdminConfig()
 		}
+	*/
 
-		// If it succeeded, we actually need to pull the refreshed admin config
-		// so the new user shows up.
-		settings = serv.GetAdminConfig()
-	}
-
-	user, err := settings.GetUserFromKey(PublicKey{incomingKey, ""})
+	user, err := serv.LookupUserFromKey(models.PublicKey{PublicKey: incomingKey}, remoteUser)
 	if err != nil {
 		slog.Warn().Err(err).Msg("User not found")
 		return false
 	}
 
-	// If they weren't the git user make sure their username matches their key.
-	if remoteUser != settings.Options.GitUser && remoteUser != user.Username {
-		slog.Warn().Msg("Key belongs to different user")
-		return false
-	}
-
 	// Update the context with what we discovered
 	CtxSetUser(ctx, user)
-	CtxSetSettings(ctx, settings)
 	CtxSetLogger(ctx, &slog)
 
 	return true
