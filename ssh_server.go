@@ -1,11 +1,14 @@
 package gitdir
 
 import (
+	"net"
 	"sync"
 
 	"github.com/gliderlabs/ssh"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	gossh "golang.org/x/crypto/ssh"
+	"gopkg.in/src-d/go-billy.v4"
 
 	"github.com/belak/go-gitdir/models"
 )
@@ -13,41 +16,33 @@ import (
 // Server represents a gitdir server.
 type Server struct {
 	lock *sync.RWMutex
-	s    *ssh.Server
-	c    *Config
+
+	Addr string
+	Path string
 
 	// Internal state
-	log zerolog.Logger
-
-	settings   *models.AdminConfig
-	users      map[string]*models.UserConfig
-	orgs       map[string]*models.OrgConfig
-	publicKeys map[string]string
+	log    zerolog.Logger
+	fs     billy.Filesystem
+	config *Config
+	ssh    *ssh.Server
 }
 
 // NewServer configures a new gitdir server and attempts to load the config
 // from the admin repo.
-func NewServer(c *Config) (*Server, error) {
-	var err error
-
+func NewServer(fs billy.Filesystem) (*Server, error) {
 	serv := &Server{
 		lock: &sync.RWMutex{},
 		log:  log.Logger,
-		c:    c,
-
-		users:      make(map[string]*models.UserConfig),
-		orgs:       make(map[string]*models.OrgConfig),
-		publicKeys: make(map[string]string),
+		fs:   fs,
 	}
 
-	serv.s = &ssh.Server{
-		Addr:             serv.c.BindAddr,
+	serv.ssh = &ssh.Server{
 		Handler:          serv.handleSession,
 		PublicKeyHandler: serv.handlePublicKey,
 	}
 
 	// This will set serv.settings
-	err = serv.Reload()
+	err := serv.Reload()
 	if err != nil {
 		return nil, err
 	}
@@ -60,14 +55,53 @@ func (serv *Server) Reload() error {
 	serv.lock.Lock()
 	defer serv.lock.Unlock()
 
-	return serv.reloadInternal()
+	// Create a new config object
+	config := NewConfig(serv.fs)
+
+	// Load the config from master
+	err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	serv.config = config
+
+	// Load all ssh keys into the actual ssh server.
+	for _, key := range serv.config.PrivateKeys {
+		signer, err := gossh.NewSignerFromSigner(key)
+		if err != nil {
+			return err
+		}
+
+		serv.ssh.AddHostKey(signer)
+	}
+
+	return nil
 }
 
-// ListenAndServe listens on the BindAddr given in the config.
-func (serv *Server) ListenAndServe() error {
-	serv.log.Info().Str("port", serv.c.BindAddr).Msg("Starting SSH server")
+// Serve listens on the given listener for new SSH connections.
+func (serv *Server) Serve(l net.Listener) error {
+	return serv.ssh.Serve(l)
+}
 
-	return serv.s.ListenAndServe()
+// ListenAndServe listens on the Addr set on the server struct for new SSH
+// connections.
+func (serv *Server) ListenAndServe() error {
+	serv.log.Info().Str("port", serv.Addr).Msg("Starting SSH server")
+
+	// Because we're using ListenAndServe, we need to copy in the bind address.
+	serv.ssh.Addr = serv.Addr
+
+	return serv.ssh.ListenAndServe()
+}
+
+// GetAdminConfig returns the current admin config in a thread-safe manner. The
+// config should not be modified.
+func (serv *Server) GetAdminConfig() *Config {
+	serv.lock.RLock()
+	defer serv.lock.RUnlock()
+
+	return serv.config
 }
 
 func (serv *Server) handlePublicKey(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
@@ -76,6 +110,10 @@ func (serv *Server) handlePublicKey(ctx ssh.Context, incomingKey ssh.PublicKey) 
 		Str("remote_addr", ctx.RemoteAddr().String()).Logger()
 
 	remoteUser := ctx.User()
+
+	config := serv.GetAdminConfig()
+
+	pk := models.PublicKey{PublicKey: incomingKey}
 
 	/*
 		if strings.HasPrefix(remoteUser, settings.Options.InvitePrefix) {
@@ -93,7 +131,7 @@ func (serv *Server) handlePublicKey(ctx ssh.Context, incomingKey ssh.PublicKey) 
 		}
 	*/
 
-	user, err := serv.LookupUserFromKey(models.PublicKey{PublicKey: incomingKey}, remoteUser)
+	user, err := config.LookupUserFromKey(pk, remoteUser)
 	if err != nil {
 		slog.Warn().Err(err).Msg("User not found")
 		return false
@@ -101,7 +139,9 @@ func (serv *Server) handlePublicKey(ctx ssh.Context, incomingKey ssh.PublicKey) 
 
 	// Update the context with what we discovered
 	CtxSetUser(ctx, user)
+	CtxSetConfig(ctx, config)
 	CtxSetLogger(ctx, &slog)
+	CtxSetPublicKey(ctx, &pk)
 
 	return true
 }

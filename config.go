@@ -1,83 +1,97 @@
 package gitdir
 
 import (
-	"github.com/rs/zerolog/log"
-	gossh "golang.org/x/crypto/ssh"
+	"errors"
+	"fmt"
+
+	"gopkg.in/src-d/go-billy.v4"
 
 	"github.com/belak/go-gitdir/internal/git"
 	"github.com/belak/go-gitdir/models"
 )
 
-// Config stores all the server-level settings. These cannot be changed at
-// runtime.
+// Config represents the config which has been loaded from all repos.
 type Config struct {
-	BindAddr  string
-	BasePath  string
-	LogFormat string
-	LogDebug  bool
+	Invites     map[string]string
+	Groups      map[string][]string
+	Orgs        map[string]*models.OrgConfig
+	Users       map[string]*models.AdminConfigUser
+	Repos       map[string]*models.RepoConfig
+	Options     models.AdminConfigOptions
+	PrivateKeys []models.PrivateKey
+
+	// Internal state
+	fs         billy.Filesystem
+	publicKeys map[string]string `yaml:"-"`
+
+	// We store any override hashes for repos so this can be used for hooks as
+	// well.
+	adminRepoHash string
+	orgRepos      map[string]string
+	userRepos     map[string]string
 }
 
-// DefaultConfig is used as the base config.
-var DefaultConfig = &Config{
-	BindAddr:  ":2222",
-	BasePath:  "./tmp",
-	LogFormat: "json",
+// NewConfig returns an empty config, attached to the given fs. In general, this
+// is designed to be called in order:
+//
+// c := NewConfig(fs)
+// err := c.Load()
+// if err != nil {
+//	return err
+// }
+// err = c.Validate()
+// if err != nil {
+//	return err
+// }
+func NewConfig(fs billy.Filesystem) *Config {
+	return &Config{
+		Invites: make(map[string]string),
+		Groups:  make(map[string][]string),
+		Orgs:    make(map[string]*models.OrgConfig),
+		Users:   make(map[string]*models.AdminConfigUser),
+		Repos:   make(map[string]*models.RepoConfig),
+
+		orgRepos:   make(map[string]string),
+		userRepos:  make(map[string]string),
+		publicKeys: make(map[string]string),
+
+		fs: fs,
+	}
 }
 
-// TODO: clean up nolint here
-func (serv *Server) reloadInternal() error { //nolint:funlen
-	// Clear configs for users and orgs. We will load them in later, after the
-	// main config is loaded.
-	serv.users = make(map[string]*models.UserConfig)
-	serv.orgs = make(map[string]*models.OrgConfig)
-	serv.publicKeys = make(map[string]string)
-
-	// Open the admin repo to the latest commit
-	adminRepo, err := git.EnsureRepo("admin/admin", true)
+// Load will load the config from the given fs, including any hash overrides.
+func (c *Config) Load() error {
+	adminRepo, err := git.EnsureRepo(c.fs, "admin/admin")
 	if err != nil {
 		return err
 	}
 
-	// Do what we can to ensure we have a config that can be loaded.
-	serv.ensureConfig(adminRepo)
-	serv.ensureEd25519Key(adminRepo)
-	serv.ensureRSAKey(adminRepo)
-
-	err = serv.reloadConfig(adminRepo)
+	err = adminRepo.Checkout(c.adminRepoHash)
 	if err != nil {
 		return err
 	}
 
-	err = serv.reloadKeys(adminRepo)
+	// Ensure config
+	//
+	// TODO: this should not be here because it is also used in hooks.
+	err = c.ensureAdminConfig(adminRepo)
 	if err != nil {
 		return err
 	}
 
-	// Reload users
-	err = serv.reloadUsers()
+	// Load config
+	err = c.loadAdminConfig(adminRepo)
 	if err != nil {
 		return err
 	}
 
-	// Reload orgs
-	err = serv.reloadOrgs()
+	// Load sub-configs
+	err = newMultiError(
+		c.loadUserConfigs(),
+		c.loadOrgConfigs(),
+	)
 	if err != nil {
 		return err
-	}
-
-	// Load all user keys into the server's public keys. We load from user repos
-	// before admin repos so anything defined in the admin repos will override
-	// the users.
-	for username, user := range serv.users {
-		for _, pk := range user.Keys {
-			serv.publicKeys[pk.RawMarshalAuthorizedKey()] = username
-		}
-	}
-
-	for username, user := range serv.settings.Users {
-		for _, pk := range user.Keys {
-			serv.publicKeys[pk.RawMarshalAuthorizedKey()] = username
-		}
 	}
 
 	// We actually only commit at the very end, after everything has been
@@ -94,149 +108,98 @@ func (serv *Server) reloadInternal() error { //nolint:funlen
 		}
 	}
 
-	return nil
-}
-
-func (serv *Server) ensureConfig(adminRepo *git.Repository) {
-	err := adminRepo.UpdateFile("config.yml", ensureSampleConfig)
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to update config.yml")
-	}
-}
-
-func (serv *Server) ensureEd25519Key(adminRepo *git.Repository) {
-	err := adminRepo.UpdateFile("ssh/id_ed25519", func(data []byte) ([]byte, error) {
-		if data != nil {
-			return data, nil
+	// Add all user public keys to the config.
+	for username, user := range c.Users {
+		for _, key := range user.Keys {
+			c.publicKeys[key.RawMarshalAuthorizedKey()] = username
 		}
-
-		pk, err := models.GenerateEd25519PrivateKey()
-		if err != nil {
-			return nil, err
-		}
-
-		return pk.MarshalPrivateKey()
-	})
-
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to update ssh/id_ed25519")
-	}
-}
-
-func (serv *Server) ensureRSAKey(adminRepo *git.Repository) {
-	err := adminRepo.UpdateFile("ssh/id_rsa", func(data []byte) ([]byte, error) {
-		if data != nil {
-			return data, nil
-		}
-
-		pk, err := models.GenerateRSAPrivateKey()
-		if err != nil {
-			return nil, err
-		}
-
-		return pk.MarshalPrivateKey()
-	})
-
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to update ssh/id_rsa")
-	}
-}
-
-func (serv *Server) reloadConfig(r *git.Repository) error {
-	configData, err := r.GetFile("config.yml")
-	if err != nil {
-		return err
-	}
-
-	serv.settings, err = models.ParseAdminConfig(configData)
-
-	return err
-}
-
-func (serv *Server) reloadKeys(r *git.Repository) error {
-	var pks []models.PrivateKey
-
-	// Load the ed25519 key
-	keyData, err := r.GetFile("ssh/id_ed25519")
-	if err != nil {
-		return err
-	}
-
-	pk, err := models.ParseEd25519PrivateKey(keyData)
-	if err != nil {
-		return err
-	}
-
-	pks = append(pks, pk)
-
-	// Load the RSA key
-	keyData, err = r.GetFile("ssh/id_rsa")
-	if err != nil {
-		return err
-	}
-
-	pk, err = models.ParseRSAPrivateKey(keyData)
-	if err != nil {
-		return err
-	}
-
-	pks = append(pks, pk)
-
-	// Actually add the ssh keys to the server
-	for _, key := range pks {
-		signer, err := gossh.NewSignerFromSigner(key)
-		if err != nil {
-			return err
-		}
-
-		serv.s.AddHostKey(signer)
 	}
 
 	return nil
 }
 
-func (serv *Server) reloadUsers() error {
-	for username := range serv.settings.Users {
-		userRepo, err := git.EnsureRepo("admin/user-"+username, true)
-		if err != nil {
-			return err
-		}
+// Validate will ensure the config is valid and return any errors.
+func (c *Config) Validate(user *User, pk *models.PublicKey) error {
+	return newMultiError(
+		c.validateUser(user),
+		c.validatePublicKey(pk),
+		c.validateAdmins(),
+	)
+}
 
-		data, err := userRepo.GetFile("config.yml")
-		if err != nil {
-			return err
-		}
-
-		userConfig, err := models.ParseUserConfig(data)
-		if err != nil {
-			return err
-		}
-
-		serv.users[username] = userConfig
+func (c *Config) validateUser(u *User) error {
+	if _, ok := c.Users[u.Username]; !ok {
+		return fmt.Errorf("cannot remove current user: %s", u.Username)
 	}
 
 	return nil
 }
 
-func (serv *Server) reloadOrgs() error {
-	for orgName := range serv.settings.Orgs {
-		orgRepo, err := git.EnsureRepo("admin/org-"+orgName, true)
-		if err != nil {
-			return err
-		}
-
-		data, err := orgRepo.GetFile("config.yml")
-		if err != nil {
-			return err
-		}
-
-		orgConfig, err := models.ParseOrgConfig(data)
-		if err != nil {
-			return err
-		}
-
-		serv.orgs[orgName] = orgConfig
+func (c *Config) validatePublicKey(pk *models.PublicKey) error {
+	if _, ok := c.publicKeys[pk.RawMarshalAuthorizedKey()]; !ok {
+		return fmt.Errorf("cannot remove current private key: %s", pk.MarshalAuthorizedKey())
 	}
+
+	return nil
+}
+
+func (c *Config) validateAdmins() error {
+	for _, user := range c.Users {
+		if user.IsAdmin {
+			return nil
+		}
+	}
+
+	return errors.New("no admins defined")
+}
+
+// SetHash will set the hash of the admin repo to use when loading.
+func (c *Config) SetHash(hash string) error {
+	adminRepo, err := git.EnsureRepo(c.fs, "admin/admin")
+	if err != nil {
+		return err
+	}
+
+	err = adminRepo.Checkout(hash)
+	if err != nil {
+		return err
+	}
+
+	c.adminRepoHash = hash
+
+	return nil
+}
+
+// SetUserHash will set the hash of the given user repo to use when loading.
+func (c *Config) SetUserHash(username, hash string) error {
+	repo, err := git.EnsureRepo(c.fs, "admin/user-"+username)
+	if err != nil {
+		return err
+	}
+
+	err = repo.Checkout(hash)
+	if err != nil {
+		return err
+	}
+
+	c.userRepos[username] = hash
+
+	return nil
+}
+
+// SetOrgHash will set the hash of the given org repo to use when loading.
+func (c *Config) SetOrgHash(orgName, hash string) error {
+	repo, err := git.EnsureRepo(c.fs, "admin/org-"+orgName)
+	if err != nil {
+		return err
+	}
+
+	err = repo.Checkout(hash)
+	if err != nil {
+		return err
+	}
+
+	c.orgRepos[orgName] = hash
 
 	return nil
 }

@@ -59,21 +59,18 @@ var ErrRepoDoesNotExist = errors.New("repo does not exist")
 
 // LookupRepoAccess checks to see if path points to a valid repo and attaches
 // the access level this user has on that repository.
-func (serv *Server) LookupRepoAccess(user *User, path string) (*RepoLookup, error) {
-	serv.lock.RLock()
-	defer serv.lock.RUnlock()
-
-	repo, err := serv.lookupRepo(path)
+func (c *Config) LookupRepoAccess(user *User, path string) (*RepoLookup, error) {
+	repo, err := c.lookupRepo(path)
 	if err != nil {
 		return nil, err
 	}
 
-	repo.Access = serv.checkUserRepoAccess(user, repo)
+	repo.Access = c.checkUserRepoAccess(user, repo)
 
 	return repo, nil
 }
 
-func (serv *Server) lookupRepo(path string) (*RepoLookup, error) {
+func (c *Config) lookupRepo(path string) (*RepoLookup, error) {
 	// Chop off .git for looking up the repo
 	path = strings.TrimSuffix(path, ".git")
 
@@ -84,18 +81,18 @@ func (serv *Server) lookupRepo(path string) (*RepoLookup, error) {
 		}, nil
 	}
 
-	if strings.HasPrefix(path, serv.settings.Options.OrgPrefix) {
-		return serv.lookupOrgRepo(strings.TrimPrefix(path, serv.settings.Options.OrgPrefix))
+	if strings.HasPrefix(path, c.Options.OrgPrefix) {
+		return c.lookupOrgRepo(strings.TrimPrefix(path, c.Options.OrgPrefix))
 	}
 
-	if strings.HasPrefix(path, serv.settings.Options.UserPrefix) {
-		return serv.lookupUserRepo(strings.TrimPrefix(path, serv.settings.Options.UserPrefix))
+	if strings.HasPrefix(path, c.Options.UserPrefix) {
+		return c.lookupUserRepo(strings.TrimPrefix(path, c.Options.UserPrefix))
 	}
 
-	return serv.lookupTopLevelRepo(path)
+	return c.lookupTopLevelRepo(path)
 }
 
-func (serv *Server) lookupOrgRepo(path string) (*RepoLookup, error) {
+func (c *Config) lookupOrgRepo(path string) (*RepoLookup, error) {
 	ret := &RepoLookup{
 		PathParts: strings.Split(path, "/"),
 	}
@@ -107,7 +104,7 @@ func (serv *Server) lookupOrgRepo(path string) (*RepoLookup, error) {
 	}
 
 	// If the org doesn't exist, nobody has access.
-	org, ok := serv.settings.Orgs[ret.PathParts[0]]
+	org, ok := c.Orgs[ret.PathParts[0]]
 	if !ok {
 		return nil, ErrRepoDoesNotExist
 	}
@@ -121,7 +118,7 @@ func (serv *Server) lookupOrgRepo(path string) (*RepoLookup, error) {
 	ret.Type = RepoTypeOrg
 
 	// If implicit repos are enabled, it exists no matter what.
-	if serv.settings.Options.ImplicitRepos {
+	if c.Options.ImplicitRepos {
 		return ret, nil
 	}
 
@@ -134,7 +131,7 @@ func (serv *Server) lookupOrgRepo(path string) (*RepoLookup, error) {
 	return nil, ErrRepoDoesNotExist
 }
 
-func (serv *Server) lookupUserRepo(path string) (*RepoLookup, error) {
+func (c *Config) lookupUserRepo(path string) (*RepoLookup, error) {
 	ret := &RepoLookup{
 		PathParts: strings.Split(path, "/"),
 	}
@@ -146,7 +143,7 @@ func (serv *Server) lookupUserRepo(path string) (*RepoLookup, error) {
 	}
 
 	// If the user doesn't exist, nobody has access.
-	user, ok := serv.settings.Users[ret.PathParts[0]]
+	user, ok := c.Users[ret.PathParts[0]]
 	if !ok {
 		return nil, ErrRepoDoesNotExist
 	}
@@ -160,7 +157,7 @@ func (serv *Server) lookupUserRepo(path string) (*RepoLookup, error) {
 	ret.Type = RepoTypeUser
 
 	// If implicit repos are enabled, it exists no matter what.
-	if serv.settings.Options.ImplicitRepos {
+	if c.Options.ImplicitRepos {
 		return ret, nil
 	}
 
@@ -173,7 +170,7 @@ func (serv *Server) lookupUserRepo(path string) (*RepoLookup, error) {
 	return nil, ErrRepoDoesNotExist
 }
 
-func (serv *Server) lookupTopLevelRepo(path string) (*RepoLookup, error) {
+func (c *Config) lookupTopLevelRepo(path string) (*RepoLookup, error) {
 	repoPath := strings.Split(path, "/")
 	if len(repoPath) != 1 {
 		return nil, ErrInvalidRepoFormat
@@ -185,11 +182,11 @@ func (serv *Server) lookupTopLevelRepo(path string) (*RepoLookup, error) {
 	}
 
 	// If implicit repos are enabled, it exists no matter what.
-	if serv.settings.Options.ImplicitRepos {
+	if c.Options.ImplicitRepos {
 		return ret, nil
 	}
 
-	_, ok := serv.settings.Repos[repoPath[0]]
+	_, ok := c.Repos[repoPath[0]]
 	if ok {
 		return ret, nil
 	}

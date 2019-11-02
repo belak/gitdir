@@ -24,25 +24,37 @@ var AnonymousUser = &User{
 // ErrUserNotFound is returned from LookupUser commands when
 var ErrUserNotFound = errors.New("user not found")
 
-// LookupUserFromKey looks up a user object given their PublicKey.
-func (serv *Server) LookupUserFromKey(pk models.PublicKey, remoteUser string) (*User, error) {
-	serv.lock.RLock()
-	defer serv.lock.RUnlock()
+// LookupUserFromUsername looks up a user objects given their username.
+func (c *Config) LookupUserFromUsername(username string) (*User, error) {
+	userConfig, ok := c.Users[username]
+	if !ok {
+		log.Warn().Msg("key does not match a user")
+		return AnonymousUser, ErrUserNotFound
+	}
 
-	username, ok := serv.publicKeys[pk.RawMarshalAuthorizedKey()]
+	return &User{
+		Username:    username,
+		IsAnonymous: false,
+		IsAdmin:     userConfig.IsAdmin,
+	}, nil
+}
+
+// LookupUserFromKey looks up a user object given their PublicKey.
+func (c *Config) LookupUserFromKey(pk models.PublicKey, remoteUser string) (*User, error) {
+	username, ok := c.publicKeys[pk.RawMarshalAuthorizedKey()]
 	if !ok {
 		log.Warn().Msg("key does not exist")
 		return AnonymousUser, ErrUserNotFound
 	}
 
-	userConfig, ok := serv.settings.Users[username]
+	userConfig, ok := c.Users[username]
 	if !ok {
 		log.Warn().Msg("key does not match a user")
 		return AnonymousUser, ErrUserNotFound
 	}
 
 	// If they weren't the git user make sure their username matches their key.
-	if remoteUser != serv.settings.Options.GitUser && remoteUser != username {
+	if remoteUser != c.Options.GitUser && remoteUser != username {
 		log.Warn().Msg("key belongs to different user")
 		return AnonymousUser, ErrUserNotFound
 	}
@@ -55,17 +67,14 @@ func (serv *Server) LookupUserFromKey(pk models.PublicKey, remoteUser string) (*
 }
 
 // LookupUserFromInvite looks up a user object given an invite code.
-func (serv *Server) LookupUserFromInvite(invite string) (*User, error) {
-	serv.lock.RLock()
-	defer serv.lock.RUnlock()
-
-	username, ok := serv.settings.Invites[invite]
+func (c *Config) LookupUserFromInvite(invite string) (*User, error) {
+	username, ok := c.Invites[invite]
 	if !ok {
 		log.Warn().Msg("invite does not exist")
 		return AnonymousUser, ErrUserNotFound
 	}
 
-	userConfig, ok := serv.settings.Users[username]
+	userConfig, ok := c.Users[username]
 	if !ok {
 		log.Warn().Msg("invite does not match a user")
 		return AnonymousUser, ErrUserNotFound

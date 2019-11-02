@@ -1,8 +1,10 @@
 package gitdir
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -11,6 +13,38 @@ import (
 	"github.com/gliderlabs/ssh"
 	"github.com/rs/zerolog"
 )
+
+type multiError struct {
+	errors []error
+}
+
+func newMultiError(errors ...error) error {
+	ret := &multiError{}
+
+	for _, err := range errors {
+		if err != nil {
+			ret.errors = append(ret.errors, err)
+		}
+	}
+
+	if len(ret.errors) == 0 {
+		return nil
+	}
+
+	return ret
+}
+
+func (ce *multiError) Error() string {
+	buf := bytes.NewBuffer(nil)
+
+	for _, err := range ce.errors {
+		buf.WriteString("- ")
+		buf.WriteString(err.Error())
+		buf.WriteString("\n")
+	}
+
+	return buf.String()
+}
 
 func handlePanic(logger *zerolog.Logger) {
 	if r := recover(); r != nil {
@@ -53,10 +87,20 @@ func sanitize(in string) string {
 }
 
 // TODO: see if this can be cleaned up
-func runCommand(log *zerolog.Logger, session ssh.Session, args []string) int { //nolint:funlen
+func runCommand( //nolint:funlen
+	log *zerolog.Logger,
+	cwd string,
+	session ssh.Session,
+	args []string,
+	environ []string,
+) int {
 	// NOTE: we are explicitly ignoring gosec here because we *only* pass in
 	// known commands here.
 	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec
+	cmd.Dir = cwd
+
+	cmd.Env = append(cmd.Env, environ...)
+	cmd.Env = append(cmd.Env, "PATH="+os.Getenv("PATH"))
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

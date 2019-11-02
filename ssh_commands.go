@@ -3,7 +3,6 @@ package gitdir
 import (
 	"context"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/gliderlabs/ssh"
@@ -29,7 +28,8 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 		return 1
 	}
 
-	log, user := CtxExtract(ctx)
+	log, config, user := CtxExtract(ctx)
+	pk := CtxPublicKey(ctx)
 
 	// Sanitize the repo name
 	//   - Trim all slashes from beginning and end
@@ -41,7 +41,7 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 
 	// Repo does not exist and permission checks should give the same error, so
 	// information about what repos are defined is not leaked.
-	repo, err := serv.LookupRepoAccess(user, repoName)
+	repo, err := config.LookupRepoAccess(user, repoName)
 	if err != nil {
 		_ = writeStringFmt(s.Stderr(), "Repo does not exist\r\n")
 		return -1
@@ -55,13 +55,17 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 	// Because we check ImplicitRepos earlier, if they have admin access, it's
 	// safe to ensure this repo exists.
 	if repo.Access >= AccessTypeAdmin {
-		_, err = git.EnsureRepo(repo.Path(), false)
+		_, err = git.EnsureRepo(serv.config.fs, repo.Path())
 		if err != nil {
 			return -1
 		}
 	}
 
-	returnCode := runCommand(log, s, []string{cmd[0], filepath.FromSlash(repo.Path())})
+	returnCode := runCommand(log, serv.fs.Root(), s, []string{cmd[0], repo.Path()}, []string{
+		"GITDIR_BASE_DIR=" + serv.Path,
+		"GITDIR_HOOK_REPO_PATH=" + repoName,
+		"GITDIR_HOOK_PUBLIC_KEY=" + pk.String(),
+	})
 
 	// Reload the server config if a config repo was changed.
 	if access == AccessTypeWrite {
