@@ -16,6 +16,20 @@ type PublicKey struct {
 	Comment string
 }
 
+// ParsePublicKey will return a PublicKey from the given data.
+func ParsePublicKey(data []byte) (*PublicKey, error) {
+	var err error
+
+	var pk PublicKey
+
+	pk.PublicKey, pk.Comment, _, _, err = ssh.ParseAuthorizedKey(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pk, nil
+}
+
 // UnmarshalYAML implements yaml.Unmarshaler.UnmarshalYAML
 func (pk *PublicKey) UnmarshalYAML(unmarshal func(v interface{}) error) error {
 	var rawData string

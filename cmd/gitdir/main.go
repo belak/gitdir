@@ -20,8 +20,9 @@ func main() {
 			log.Fatal().Msg("sub-command not found")
 		}
 
-		// TODO: call hook
-		log.Fatal().Msg("hook not implemented")
+		cmdHook(c)
+
+		return
 	}
 
 	cmdServe(c)

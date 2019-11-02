@@ -4,17 +4,40 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/belak/go-gitdir"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"gopkg.in/src-d/go-billy.v4"
+	"gopkg.in/src-d/go-billy.v4/osfs"
 )
 
-// NewEnvConfig returns a new gitdir.Config based on environment variables.
-func NewEnvConfig() (gitdir.Config, error) {
+// Config stores all the server-level settings. These cannot be changed at
+// runtime. They are only used by the binary and are passed to the proper
+// places.
+type Config struct {
+	BindAddr  string
+	BasePath  string
+	LogFormat string
+	LogDebug  bool
+}
+
+// FS returns the billy.Filesystem for this base path.
+func (c Config) FS() billy.Filesystem {
+	return osfs.New(c.BasePath)
+}
+
+// DefaultConfig is used as the base config.
+var DefaultConfig = Config{
+	BindAddr:  ":2222",
+	BasePath:  "./tmp",
+	LogFormat: "json",
+}
+
+// NewEnvConfig returns a new Config based on environment variables.
+func NewEnvConfig() (Config, error) {
 	var err error
 
-	c := *gitdir.DefaultConfig
+	c := DefaultConfig
 
 	if rawDebug, ok := os.LookupEnv("GITDIR_DEBUG"); ok {
 		c.LogDebug, err = strconv.ParseBool(rawDebug)
@@ -48,14 +71,13 @@ func NewEnvConfig() (gitdir.Config, error) {
 		return c, errors.New("GITDIR_BASE_DIR: not set")
 	}
 
-	// It's easier to handle repo operations down the line if we switch to the
-	// base path. Also, repo names are prettier when you run into errors.
-	//
-	// TODO: this should be moved into the gitdir package so you can have
-	// multiple gitdirs at once.
-	err = os.Chdir(c.BasePath)
+	info, err := os.Stat(c.BasePath)
 	if err != nil {
 		return c, errors.Wrap(err, "GITDIR_BASE_DIR")
+	}
+
+	if !info.IsDir() {
+		return c, errors.New("GITDIR_BASE_DIR: not a directory")
 	}
 
 	return c, nil

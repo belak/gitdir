@@ -1,16 +1,18 @@
 package git
 
 import (
+	"bytes"
+	"fmt"
 	"io/ioutil"
+	"os"
+	"strings"
 
-	"github.com/rs/zerolog/log"
 	billy "gopkg.in/src-d/go-billy.v4"
 	"gopkg.in/src-d/go-billy.v4/memfs"
-	"gopkg.in/src-d/go-billy.v4/osfs"
+	"gopkg.in/src-d/go-billy.v4/util"
 	git "gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/src-d/go-git.v4/plumbing/cache"
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
 	"gopkg.in/src-d/go-git.v4/storage/filesystem"
 )
 
@@ -22,38 +24,27 @@ import (
 // want to.
 type Repository struct {
 	Repo       *git.Repository
+	RepoFS     *filesystem.Storage
 	Worktree   *git.Worktree
 	WorktreeFS billy.Filesystem
 }
 
-// EnsureRepo will open a repository if it exists and try to create it if it
-// doesn't. runCheckout allows you to skip the checkout of the files in the
-// repo.
-func EnsureRepo(path string, runCheckout bool) (*Repository, error) {
-	// TODO: if .git doesn't exist, but without does, just use that?
-	fs := osfs.New(path + ".git")
+// Open will open a repository if it exists.
+func Open(baseFS billy.Filesystem, path string) (*Repository, error) {
+	// This lets us sanitize the path and ensure it always has .git on the end.
+	path = strings.TrimSuffix(path, ".git") + ".git"
+
+	fs, err := baseFS.Chroot(path)
+	if err != nil {
+		return nil, err
+	}
+
+	repoFS := filesystem.NewStorage(fs, cache.NewObjectLRUDefault())
 
 	// TODO: this probably shouldn't be memfs.
 	worktreeFS := memfs.New()
 
-	repoFS := filesystem.NewStorage(fs, cache.NewObjectLRUDefault())
-
 	repo, err := git.Open(repoFS, worktreeFS)
-	// If we explicitly got a NotExists error, we should init the repo
-	if err == git.ErrRepositoryNotExists {
-		log.Warn().Str("repo_path", path).Msg("Repo doesn't exist: creating")
-
-		// Init the repo without a worktree.
-		_, err = git.Init(repoFS, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		// Try again to open the repo now that it exists, using a separate
-		// worktree fs.
-		repo, err = git.Open(repoFS, worktreeFS)
-	}
-
 	if err != nil {
 		return nil, err
 	}
@@ -63,98 +54,200 @@ func EnsureRepo(path string, runCheckout bool) (*Repository, error) {
 		return nil, err
 	}
 
-	if runCheckout {
-		err = worktree.Checkout(&git.CheckoutOptions{
-			Force: true,
-		})
-		// It's fine to ignore ErrReferenceNotFound because that means this is a
-		// repo without any commits which doesn't matter for our use cases.
-		if err != nil && err != plumbing.ErrReferenceNotFound {
-			return nil, err
-		}
-	}
-
 	return &Repository{
 		Repo:       repo,
+		RepoFS:     repoFS,
 		Worktree:   worktree,
 		WorktreeFS: worktreeFS,
 	}, nil
 }
 
-// GetFile is a convenience method to get the contents of a file in the repo.
-func (wr *Repository) GetFile(filename string) ([]byte, error) {
-	f, err := wr.WorktreeFS.Open(filename)
+// EnsureRepo will open a repository if it exists and try to create it if it
+// doesn't.
+func EnsureRepo(baseFS billy.Filesystem, path string) (*Repository, error) {
+	// This lets us sanitize the path and ensure it always has .git on the end.
+	path = strings.TrimSuffix(path, ".git") + ".git"
+
+	if !dirExists(baseFS, path) {
+		oldPath := strings.TrimSuffix(path, ".git")
+
+		// If the old dir exists, rename it. Otherwize, init the repo.
+		if dirExists(baseFS, oldPath) {
+			err := baseFS.Rename(oldPath, path)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			fs, err := baseFS.Chroot(path)
+			if err != nil {
+				return nil, err
+			}
+
+			repoFS := filesystem.NewStorage(fs, cache.NewObjectLRUDefault())
+
+			// Init the repo without a worktree so it's a bare repo.
+			_, err = git.Init(repoFS, nil)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	repo, err := Open(baseFS, path)
 	if err != nil {
 		return nil, err
 	}
 
-	return ioutil.ReadAll(f)
-}
-
-// FileExists returns true if the given path exists and is a regular file in the
-// repository worktree.
-func (wr *Repository) FileExists(filename string) bool {
-	stat, err := wr.WorktreeFS.Stat(filename)
+	err = ensureHooks(repo.RepoFS.Filesystem())
 	if err != nil {
-		return false
+		return nil, err
 	}
 
-	return stat.Mode().IsRegular()
+	return repo, nil
 }
 
-// DirExists returns true if the given path exists and is a directory in the
-// repository worktree.
-func (wr *Repository) DirExists(filename string) bool {
-	stat, err := wr.WorktreeFS.Stat(filename)
-	if err != nil {
-		return false
+// Checkout will checkout the given hash to the worktreeFS. If an empty string
+// is given, we checkout master.
+func (r *Repository) Checkout(hash string) error {
+	opts := &git.CheckoutOptions{
+		Force: true,
 	}
 
-	return stat.Mode().IsDir()
+	if hash != "" {
+		opts.Hash = plumbing.NewHash(hash)
+	}
+
+	err := r.Worktree.Checkout(opts)
+
+	// It's fine to ignore ErrReferenceNotFound because that means this is a
+	// repo without any commits which doesn't matter for our use cases.
+	if err != nil && err != plumbing.ErrReferenceNotFound {
+		return err
+	}
+
+	return nil
 }
 
-// CreateFile is a convenience method to set the contents of a file in the
-// repo and stage it.
-func (wr *Repository) CreateFile(filename string, data []byte) error {
-	f, err := wr.WorktreeFS.Create(filename)
+func ensureHooks(fs billy.Filesystem) error {
+	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
 
-	_, err = f.Write(data)
-	if err != nil {
-		return err
+	for _, hook := range hooks {
+		err := fs.MkdirAll("hooks/"+hook.Name+".d", 0777)
+		if err != nil {
+			return err
+		}
+
+		// Write the gitdir hook
+		err = writeIfDifferent(
+			fs,
+			"hooks/"+hook.Name+".d/gitdir",
+			[]byte(fmt.Sprintf(hook.GitdirHookTemplate, exe)),
+		)
+		if err != nil {
+			return err
+		}
+
+		// Write out the actual hook
+		//
+		// TODO: warn when this would clobber a file
+		err = writeIfDifferent(fs, "hooks/"+hook.Name, []byte(hookTemplate))
+		if err != nil {
+			return err
+		}
 	}
 
-	_, err = wr.Worktree.Add(filename)
-
-	return err
+	return nil
 }
 
-// UpdateFile is a convenience method to get the contents of a file, pass it
-// to a callback, write the contents back to the file if no error was
-// returned, and stage the file.
-func (wr *Repository) UpdateFile(filename string, cb func([]byte) ([]byte, error)) error {
-	data, _ := wr.GetFile(filename)
+func writeIfDifferent(fs billy.Basic, path string, data []byte) error {
+	var oldData []byte
 
-	data, err := cb(data)
-	if err != nil {
-		return err
+	f, err := fs.Open(path)
+	if err == nil {
+		defer f.Close()
+		oldData, _ = ioutil.ReadAll(f)
 	}
 
-	return wr.CreateFile(filename, data)
+	// Quick check to avoid unneeded writes
+	if !bytes.Equal(oldData, data) {
+		return util.WriteFile(fs, path, data, 0777)
+	}
+
+	return nil
 }
 
-// Commit is a convenience method to make working with the worktree a little
-// bit easier.
-func (wr *Repository) Commit(msg string, author *object.Signature) error {
-	if author == nil {
-		author = newAdminGitSignature()
-	}
+// hookTemplate is based on a combination of sources, but allows us to run
+// multiple hooks from a directory (all of them will always be run) and only
+// fail if at least one of them failed. This should support every type of git
+// hook, as it proxies both stdin and arguments.
+var hookTemplate = `#!/usr/bin/env sh
+set -e
+test -n "${GIT_DIR}" || exit 1
 
-	_, err := wr.Worktree.Commit(msg, &git.CommitOptions{
-		Author: author,
-	})
+stdin=$(cat)
+hookname=$(basename $0)
+exitcodes=""
 
-	return err
+for hook in ${GIT_DIR}/hooks/${hookname}.d/*; do
+	# Avoid running non-executable hooks
+	test -x "${hook}" || continue
+
+	# Run the actual hook
+	echo "${stdin}" | "${hook}" "$@"
+
+	# Store the exit code for later use
+	exitcodes="${exitcodes} $?"
+done
+
+# Exit on the first non-zero exit code.
+for code in ${exitcodes}; do
+	test ${code} -eq 0 || exit ${i}
+done
+
+exit 0
+`
+
+var hooks = []struct {
+	Name               string
+	GitdirHookTemplate string
+}{
+	{
+		Name: "pre-receive",
+		GitdirHookTemplate: `#!/usr/bin/env sh
+
+if [ -z "$GITDIR_BASE_DIR" ]; then
+	echo "Warning: GITDIR_BASE_DIR not defined. Skipping hooks."
+	exit 0
+fi
+
+%q hook pre-receive
+`,
+	},
+	{
+		Name: "update",
+		GitdirHookTemplate: `#!/usr/bin/env sh
+
+if [ -z "$GITDIR_BASE_DIR" ]; then
+	echo "Warning: GITDIR_BASE_DIR not defined. Skipping hooks."
+	exit 0
+fi
+
+%q hook update $1 $2 $3
+`,
+	},
+	{
+		Name: "post-receive",
+		GitdirHookTemplate: `#!/usr/bin/env sh
+
+if [ -z "$GITDIR_BASE_DIR" ]; then
+	echo "Warning: GITDIR_BASE_DIR not defined. Skipping hooks."
+	exit 0
+fi
+
+%q hook post-receive
+`,
+	},
 }
