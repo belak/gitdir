@@ -2,6 +2,7 @@ package gitdir
 
 import (
 	"errors"
+	"fmt"
 	"path"
 	"strings"
 )
@@ -19,6 +20,26 @@ const (
 	RepoTypeUser
 	RepoTypeTopLevel
 )
+
+// String implements Stringer
+func (r RepoType) String() string {
+	switch r {
+	case RepoTypeAdmin:
+		return "Admin"
+	case RepoTypeOrgConfig:
+		return "OrgConfig"
+	case RepoTypeOrg:
+		return "Org"
+	case RepoTypeUserConfig:
+		return "UserConfig"
+	case RepoTypeUser:
+		return "User"
+	case RepoTypeTopLevel:
+		return "TopLevel"
+	default:
+		return fmt.Sprintf("Unknown(%d)", r)
+	}
+}
 
 // RepoLookup represents a repository that has been confirmed in the config and
 // the access level the given user has.
@@ -191,5 +212,5 @@ func (c *Config) lookupTopLevelRepo(path string) (*RepoLookup, error) {
 		return ret, nil
 	}
 
-	return nil, ErrInvalidRepoFormat
+	return nil, ErrRepoDoesNotExist
 }

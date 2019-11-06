@@ -28,7 +28,12 @@ var ErrUserNotFound = errors.New("user not found")
 func (c *Config) LookupUserFromUsername(username string) (*User, error) {
 	userConfig, ok := c.Users[username]
 	if !ok {
-		log.Warn().Msg("key does not match a user")
+		log.Warn().Msg("username does not match a user")
+		return AnonymousUser, ErrUserNotFound
+	}
+
+	if userConfig.Disabled {
+		log.Warn().Msg("user is disabled")
 		return AnonymousUser, ErrUserNotFound
 	}
 
@@ -50,6 +55,11 @@ func (c *Config) LookupUserFromKey(pk models.PublicKey, remoteUser string) (*Use
 	userConfig, ok := c.Users[username]
 	if !ok {
 		log.Warn().Msg("key does not match a user")
+		return AnonymousUser, ErrUserNotFound
+	}
+
+	if userConfig.Disabled {
+		log.Warn().Msg("user is disabled")
 		return AnonymousUser, ErrUserNotFound
 	}
 
@@ -77,6 +87,11 @@ func (c *Config) LookupUserFromInvite(invite string) (*User, error) {
 	userConfig, ok := c.Users[username]
 	if !ok {
 		log.Warn().Msg("invite does not match a user")
+		return AnonymousUser, ErrUserNotFound
+	}
+
+	if userConfig.Disabled {
+		log.Warn().Msg("user is disabled")
 		return AnonymousUser, ErrUserNotFound
 	}
 

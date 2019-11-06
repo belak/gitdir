@@ -13,3 +13,8 @@ type RepoConfig struct {
 	// Any user or group who explicitly has read access
 	Read []string
 }
+
+// NewRepoConfig returns a blank RepoConfig.
+func NewRepoConfig() *RepoConfig {
+	return &RepoConfig{}
+}

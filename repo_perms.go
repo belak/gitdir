@@ -1,6 +1,7 @@
 package gitdir
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -20,25 +21,43 @@ const (
 	AccessTypeAdmin
 )
 
-func (c *Config) doesGroupContainUser(user *User, groupName string, groupPath []string) bool {
+// String implements Stringer
+func (a AccessType) String() string {
+	switch a {
+	case AccessTypeNone:
+		return "None"
+	case AccessTypeRead:
+		return "Read"
+	case AccessTypeWrite:
+		return "Write"
+	case AccessTypeAdmin:
+		return "Admin"
+	default:
+		return fmt.Sprintf("Unknown(%d)", a)
+	}
+}
+
+const groupPrefix = "$"
+
+func (c *Config) doesGroupContainUser(username string, groupName string, groupPath []string) bool {
+	// Group loop - this should never be possible in a checked config.
+	if listContainsStr(groupPath, groupName) {
+		log.Warn().Strs("groups", append(groupPath, groupName)).Msg("group loop")
+		return false
+	}
+
 	groupPath = append(groupPath, groupName)
 
 	for _, lookup := range c.Groups[groupName] {
-		if strings.HasPrefix(lookup, "$") {
-			intGroupName := lookup[1:]
+		if strings.HasPrefix(lookup, groupPrefix) {
+			intGroupName := strings.TrimPrefix(lookup, groupPrefix)
 
-			// Group loop - this should never be possible in a checked config.
-			if intGroupName == groupName {
-				log.Warn().Strs("groups", groupPath).Msg("group loop")
-				return false
-			}
-
-			if c.doesGroupContainUser(user, intGroupName, groupPath) {
+			if c.doesGroupContainUser(username, intGroupName, groupPath) {
 				return true
 			}
 		}
 
-		if lookup == user.Username {
+		if lookup == username {
 			return true
 		}
 	}
@@ -46,15 +65,15 @@ func (c *Config) doesGroupContainUser(user *User, groupName string, groupPath []
 	return false
 }
 
-func (c *Config) checkListsForUser(user *User, userLists ...[]string) bool {
+func (c *Config) checkListsForUser(username string, userLists ...[]string) bool {
 	for _, list := range userLists {
 		for _, lookup := range list {
-			if strings.HasPrefix(lookup, "$") {
-				if c.doesGroupContainUser(user, lookup[1:], nil) {
+			if strings.HasPrefix(lookup, groupPrefix) {
+				if c.doesGroupContainUser(username, strings.TrimPrefix(lookup, groupPrefix), nil) {
 					return true
 				}
 			} else {
-				if lookup == user.Username {
+				if lookup == username {
 					return true
 				}
 			}
@@ -78,7 +97,7 @@ func (c *Config) checkUserRepoAccess(user *User, repo *RepoLookup) AccessType { 
 		return AccessTypeNone
 	case RepoTypeOrgConfig:
 		org := c.Orgs[repo.PathParts[0]]
-		if c.checkListsForUser(user, org.Admin) {
+		if c.checkListsForUser(user.Username, org.Admin) {
 			return AccessTypeAdmin
 		}
 
@@ -88,7 +107,7 @@ func (c *Config) checkUserRepoAccess(user *User, repo *RepoLookup) AccessType { 
 
 		// Because we already checked to see if this repo exists, this user has
 		// admin on the repo if they're an org admin.
-		if c.checkListsForUser(user, org.Admin) {
+		if c.checkListsForUser(user.Username, org.Admin) {
 			return AccessTypeAdmin
 		}
 
@@ -98,18 +117,20 @@ func (c *Config) checkUserRepoAccess(user *User, repo *RepoLookup) AccessType { 
 			// level permissions.
 			if c.Options.ImplicitRepos {
 				switch {
-				case c.checkListsForUser(user, org.Write):
+				case c.checkListsForUser(user.Username, org.Write):
 					return AccessTypeWrite
-				case c.checkListsForUser(user, org.Read):
+				case c.checkListsForUser(user.Username, org.Read):
 					return AccessTypeRead
 				}
 			}
+
+			return AccessTypeNone
 		}
 
 		switch {
-		case c.checkListsForUser(user, org.Write, repo.Write):
+		case c.checkListsForUser(user.Username, org.Write, repo.Write):
 			return AccessTypeWrite
-		case c.checkListsForUser(user, org.Read, repo.Read):
+		case c.checkListsForUser(user.Username, org.Read, repo.Read):
 			return AccessTypeRead
 		}
 
@@ -137,9 +158,9 @@ func (c *Config) checkUserRepoAccess(user *User, repo *RepoLookup) AccessType { 
 		}
 
 		switch {
-		case c.checkListsForUser(user, repo.Write):
+		case c.checkListsForUser(user.Username, repo.Write):
 			return AccessTypeWrite
-		case c.checkListsForUser(user, repo.Read):
+		case c.checkListsForUser(user.Username, repo.Read):
 			return AccessTypeRead
 		}
 	case RepoTypeTopLevel:
@@ -150,9 +171,9 @@ func (c *Config) checkUserRepoAccess(user *User, repo *RepoLookup) AccessType { 
 		}
 
 		switch {
-		case c.checkListsForUser(user, repo.Write):
+		case c.checkListsForUser(user.Username, repo.Write):
 			return AccessTypeWrite
-		case c.checkListsForUser(user, repo.Read):
+		case c.checkListsForUser(user.Username, repo.Read):
 			return AccessTypeRead
 		}
 	}

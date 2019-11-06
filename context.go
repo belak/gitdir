@@ -74,12 +74,11 @@ func CtxSetLogger(parent ssh.Context, logger *zerolog.Logger) {
 // CtxLogger pulls the logger out of the context, or the default logger if not
 // found.
 func CtxLogger(ctx context.Context) *zerolog.Logger {
-	ctxLog, ok := ctx.Value(contextKeyLogger).(*zerolog.Logger)
-	if !ok {
-		return &log.Logger
+	if ctxLog, ok := ctx.Value(contextKeyLogger).(*zerolog.Logger); ok {
+		return ctxLog
 	}
 
-	return ctxLog
+	return &log.Logger
 }
 
 // CtxSetPublicKey puts the given public key into the ssh.Context.

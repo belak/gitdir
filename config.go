@@ -1,9 +1,6 @@
 package gitdir
 
 import (
-	"errors"
-	"fmt"
-
 	"gopkg.in/src-d/go-billy.v4"
 
 	"github.com/belak/go-gitdir/internal/git"
@@ -54,6 +51,8 @@ func NewConfig(fs billy.Filesystem) *Config {
 		orgRepos:   make(map[string]string),
 		userRepos:  make(map[string]string),
 		publicKeys: make(map[string]string),
+
+		Options: models.DefaultAdminConfigOptions,
 
 		fs: fs,
 	}
@@ -108,49 +107,18 @@ func (c *Config) Load() error {
 		}
 	}
 
+	c.flatten()
+
+	return nil
+}
+
+func (c *Config) flatten() {
 	// Add all user public keys to the config.
 	for username, user := range c.Users {
 		for _, key := range user.Keys {
 			c.publicKeys[key.RawMarshalAuthorizedKey()] = username
 		}
 	}
-
-	return nil
-}
-
-// Validate will ensure the config is valid and return any errors.
-func (c *Config) Validate(user *User, pk *models.PublicKey) error {
-	return newMultiError(
-		c.validateUser(user),
-		c.validatePublicKey(pk),
-		c.validateAdmins(),
-	)
-}
-
-func (c *Config) validateUser(u *User) error {
-	if _, ok := c.Users[u.Username]; !ok {
-		return fmt.Errorf("cannot remove current user: %s", u.Username)
-	}
-
-	return nil
-}
-
-func (c *Config) validatePublicKey(pk *models.PublicKey) error {
-	if _, ok := c.publicKeys[pk.RawMarshalAuthorizedKey()]; !ok {
-		return fmt.Errorf("cannot remove current private key: %s", pk.MarshalAuthorizedKey())
-	}
-
-	return nil
-}
-
-func (c *Config) validateAdmins() error {
-	for _, user := range c.Users {
-		if user.IsAdmin {
-			return nil
-		}
-	}
-
-	return errors.New("no admins defined")
 }
 
 // SetHash will set the hash of the admin repo to use when loading.
