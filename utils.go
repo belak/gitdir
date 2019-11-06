@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/gliderlabs/ssh"
 	"github.com/rs/zerolog"
@@ -46,6 +45,16 @@ func (ce *multiError) Error() string {
 	return buf.String()
 }
 
+func listContainsStr(list []string, target string) bool {
+	for _, val := range list {
+		if val == target {
+			return true
+		}
+	}
+
+	return false
+}
+
 func handlePanic(logger *zerolog.Logger) {
 	if r := recover(); r != nil {
 		logger.Error().Err(fmt.Errorf("%s", r)).Msg("Caught panic")
@@ -67,18 +76,7 @@ func getExitStatusFromError(err error) int {
 		return 1
 	}
 
-	waitStatus, ok := exitErr.Sys().(syscall.WaitStatus)
-	if !ok {
-		// This is a fallback and should at least let us return something useful
-		// when running on Windows, even if it isn't completely accurate.
-		if exitErr.Success() {
-			return 0
-		}
-
-		return 1
-	}
-
-	return waitStatus.ExitStatus()
+	return exitErr.ProcessState.ExitCode()
 }
 
 func sanitize(in string) string {

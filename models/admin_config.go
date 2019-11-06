@@ -19,9 +19,16 @@ type AdminConfig struct {
 type AdminConfigUser struct {
 	UserConfig `yaml:",inline"`
 
-	IsAdmin  bool     `yaml:"is_admin"`
-	Disabled bool     `yaml:"disabled"`
-	Invites  []string `yaml:"invites"`
+	IsAdmin  bool `yaml:"is_admin"`
+	Disabled bool `yaml:"disabled"`
+	// Invites  []string `yaml:"invites"`
+}
+
+// NewAdminConfigUser returns a blank AdminConfigUser.
+func NewAdminConfigUser() *AdminConfigUser {
+	return &AdminConfigUser{
+		UserConfig: *NewUserConfig(),
+	}
 }
 
 // AdminConfigOptions contains all the server level settings which can be
