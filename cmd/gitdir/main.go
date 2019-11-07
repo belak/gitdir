@@ -8,9 +8,6 @@ import (
 
 func main() {
 	c, err := NewEnvConfig()
-
-	log.Info().Msg("starting go-gitdir")
-
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to load base config")
 	}
@@ -24,6 +21,8 @@ func main() {
 
 		return
 	}
+
+	log.Info().Msg("starting go-gitdir")
 
 	cmdServe(c)
 }

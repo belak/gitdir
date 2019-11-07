@@ -65,6 +65,7 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 		"GITDIR_BASE_DIR=" + serv.fs.Root(),
 		"GITDIR_HOOK_REPO_PATH=" + repoName,
 		"GITDIR_HOOK_PUBLIC_KEY=" + pk.String(),
+		"GITDIR_LOG_FORMAT=console",
 	})
 
 	// Reload the server config if a config repo was changed.
