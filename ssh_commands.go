@@ -62,7 +62,7 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 	}
 
 	returnCode := runCommand(log, serv.fs.Root(), s, []string{cmd[0], repo.Path()}, []string{
-		"GITDIR_BASE_DIR=" + serv.Path,
+		"GITDIR_BASE_DIR=" + serv.fs.Root(),
 		"GITDIR_HOOK_REPO_PATH=" + repoName,
 		"GITDIR_HOOK_PUBLIC_KEY=" + pk.String(),
 	})

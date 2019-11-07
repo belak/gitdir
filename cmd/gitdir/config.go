@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/pkg/errors"
@@ -69,6 +70,10 @@ func NewEnvConfig() (Config, error) {
 
 	if c.BasePath, ok = os.LookupEnv("GITDIR_BASE_DIR"); !ok {
 		return c, errors.New("GITDIR_BASE_DIR: not set")
+	}
+
+	if c.BasePath, err = filepath.Abs(c.BasePath); err != nil {
+		return c, errors.Wrap(err, "GITDIR_BASE_DIR")
 	}
 
 	info, err := os.Stat(c.BasePath)

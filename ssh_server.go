@@ -18,7 +18,6 @@ type Server struct {
 	lock *sync.RWMutex
 
 	Addr string
-	Path string
 
 	// Internal state
 	log    zerolog.Logger
