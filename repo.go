@@ -46,7 +46,7 @@ func (r RepoType) String() string {
 type RepoLookup struct {
 	Type      RepoType
 	PathParts []string
-	Access    AccessType
+	Access    AccessLevel
 }
 
 // Path returns the full path to this repository on disk. This is relative to

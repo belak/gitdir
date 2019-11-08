@@ -102,14 +102,14 @@ func TestRepoTypeStringer(t *testing.T) {
 	assert.Equal(t, "Unknown(42)", RepoType(42).String())
 }
 
-func TestAccessTypeStringer(t *testing.T) {
+func TestAccessLevelStringer(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "None", AccessTypeNone.String())
-	assert.Equal(t, "Read", AccessTypeRead.String())
-	assert.Equal(t, "Write", AccessTypeWrite.String())
-	assert.Equal(t, "Admin", AccessTypeAdmin.String())
-	assert.Equal(t, "Unknown(42)", AccessType(42).String())
+	assert.Equal(t, "None", AccessLevelNone.String())
+	assert.Equal(t, "Read", AccessLevelRead.String())
+	assert.Equal(t, "Write", AccessLevelWrite.String())
+	assert.Equal(t, "Admin", AccessLevelAdmin.String())
+	assert.Equal(t, "Unknown(42)", AccessLevel(42).String())
 }
 
 func TestRepoLookup(t *testing.T) { //nolint:funlen
@@ -260,21 +260,21 @@ func TestCheckListsForUser(t *testing.T) {
 }
 
 type allRepoAccessLevels struct {
-	Admin      AccessType
-	OrgConfig  AccessType
-	OrgRepo    AccessType
-	UserConfig AccessType
-	UserRepo   AccessType
-	TopLevel   AccessType
+	Admin      AccessLevel
+	OrgConfig  AccessLevel
+	OrgRepo    AccessLevel
+	UserConfig AccessLevel
+	UserRepo   AccessLevel
+	TopLevel   AccessLevel
 }
 
 type allImplicitAccessLevels struct {
-	Org      AccessType
-	User     AccessType
-	TopLevel AccessType
+	Org      AccessLevel
+	User     AccessLevel
+	TopLevel AccessLevel
 }
 
-func lookupAndCheck(t *testing.T, c *Config, u *User, path string, access AccessType) {
+func lookupAndCheck(t *testing.T, c *Config, u *User, path string, access AccessLevel) {
 	repo, err := c.LookupRepoAccess(u, path)
 	require.Nil(t, err)
 	require.NotNil(t, repo)
@@ -345,72 +345,72 @@ func TestCheckUserRepoAccess(t *testing.T) { //nolint:funlen
 		{
 			"an-admin",
 			allRepoAccessLevels{
-				Admin:      AccessTypeAdmin,
-				OrgConfig:  AccessTypeAdmin,
-				OrgRepo:    AccessTypeAdmin,
-				UserConfig: AccessTypeAdmin,
-				UserRepo:   AccessTypeAdmin,
-				TopLevel:   AccessTypeAdmin,
+				Admin:      AccessLevelAdmin,
+				OrgConfig:  AccessLevelAdmin,
+				OrgRepo:    AccessLevelAdmin,
+				UserConfig: AccessLevelAdmin,
+				UserRepo:   AccessLevelAdmin,
+				TopLevel:   AccessLevelAdmin,
 			},
 			allImplicitAccessLevels{
-				Org:      AccessTypeAdmin,
-				User:     AccessTypeAdmin,
-				TopLevel: AccessTypeAdmin,
+				Org:      AccessLevelAdmin,
+				User:     AccessLevelAdmin,
+				TopLevel: AccessLevelAdmin,
 			},
 		},
 		{
 			"org-admin",
 			allRepoAccessLevels{
-				OrgConfig: AccessTypeAdmin,
-				OrgRepo:   AccessTypeAdmin,
+				OrgConfig: AccessLevelAdmin,
+				OrgRepo:   AccessLevelAdmin,
 			},
 			allImplicitAccessLevels{
-				Org: AccessTypeAdmin,
+				Org: AccessLevelAdmin,
 			},
 		},
 		{
 			"org-write",
 			allRepoAccessLevels{
-				OrgRepo: AccessTypeWrite,
+				OrgRepo: AccessLevelWrite,
 			},
 			allImplicitAccessLevels{
-				Org: AccessTypeWrite,
+				Org: AccessLevelWrite,
 			},
 		},
 		{
 			"org-read",
 			allRepoAccessLevels{
-				OrgRepo: AccessTypeRead,
+				OrgRepo: AccessLevelRead,
 			},
 			allImplicitAccessLevels{
-				Org: AccessTypeRead,
+				Org: AccessLevelRead,
 			},
 		},
 		{
 			"non-admin",
 			allRepoAccessLevels{
-				UserConfig: AccessTypeAdmin,
-				UserRepo:   AccessTypeAdmin,
+				UserConfig: AccessLevelAdmin,
+				UserRepo:   AccessLevelAdmin,
 			},
 			allImplicitAccessLevels{
-				User: AccessTypeAdmin,
+				User: AccessLevelAdmin,
 			},
 		},
 		{
 			"write-user",
 			allRepoAccessLevels{
-				OrgRepo:  AccessTypeWrite,
-				UserRepo: AccessTypeWrite,
-				TopLevel: AccessTypeWrite,
+				OrgRepo:  AccessLevelWrite,
+				UserRepo: AccessLevelWrite,
+				TopLevel: AccessLevelWrite,
 			},
 			allImplicitAccessLevels{},
 		},
 		{
 			"read-user",
 			allRepoAccessLevels{
-				OrgRepo:  AccessTypeRead,
-				UserRepo: AccessTypeRead,
-				TopLevel: AccessTypeRead,
+				OrgRepo:  AccessLevelRead,
+				UserRepo: AccessLevelRead,
+				TopLevel: AccessLevelRead,
 			},
 			allImplicitAccessLevels{},
 		},

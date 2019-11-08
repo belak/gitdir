@@ -22,7 +22,7 @@ func cmdNotFound(ctx context.Context, s ssh.Session, cmd []string) int {
 	return 1
 }
 
-func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []string, access AccessType) int {
+func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []string, access AccessLevel) int {
 	if len(cmd) != 2 {
 		_ = writeStringFmt(s.Stderr(), "Missing repo name argument\r\n")
 		return 1
@@ -54,7 +54,7 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 
 	// Because we check ImplicitRepos earlier, if they have admin access, it's
 	// safe to ensure this repo exists.
-	if repo.Access >= AccessTypeAdmin {
+	if repo.Access >= AccessLevelAdmin {
 		_, err = git.EnsureRepo(serv.config.fs, repo.Path())
 		if err != nil {
 			return -1
@@ -69,7 +69,7 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 	})
 
 	// Reload the server config if a config repo was changed.
-	if access == AccessTypeWrite {
+	if access == AccessLevelWrite {
 		switch repo.Type {
 		case RepoTypeAdmin, RepoTypeOrgConfig, RepoTypeUserConfig:
 			err = serv.Reload()

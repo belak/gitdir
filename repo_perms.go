@@ -7,30 +7,30 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// AccessType represents the level of access being requested and the level of
+// AccessLevel represents the level of access being requested and the level of
 // access a user has.
-type AccessType int
+type AccessLevel int
 
-// AccessType defaults to AccessTypeNone for security. A repo lookup returns the
+// AccessLevel defaults to AccessLevelNone for security. A repo lookup returns the
 // level of permissions a user has and if it's not explicitly set, they don't
 // have any.
 const (
-	AccessTypeNone AccessType = iota
-	AccessTypeRead
-	AccessTypeWrite
-	AccessTypeAdmin
+	AccessLevelNone AccessLevel = iota
+	AccessLevelRead
+	AccessLevelWrite
+	AccessLevelAdmin
 )
 
 // String implements Stringer
-func (a AccessType) String() string {
+func (a AccessLevel) String() string {
 	switch a {
-	case AccessTypeNone:
+	case AccessLevelNone:
 		return "None"
-	case AccessTypeRead:
+	case AccessLevelRead:
 		return "Read"
-	case AccessTypeWrite:
+	case AccessLevelWrite:
 		return "Write"
-	case AccessTypeAdmin:
+	case AccessLevelAdmin:
 		return "Admin"
 	default:
 		return fmt.Sprintf("Unknown(%d)", a)
@@ -84,31 +84,31 @@ func (c *Config) checkListsForUser(username string, userLists ...[]string) bool 
 }
 
 // TODO: clean up nolint here
-func (c *Config) checkUserRepoAccess(user *User, repo *RepoLookup) AccessType { //nolint:funlen
+func (c *Config) checkUserRepoAccess(user *User, repo *RepoLookup) AccessLevel { //nolint:funlen
 	// Admins always have access to everything.
 	if user.IsAdmin {
-		return AccessTypeAdmin
+		return AccessLevelAdmin
 	}
 
 	switch repo.Type {
 	case RepoTypeAdmin:
 		// If we made it this far, they're not an admin, so they don't have
 		// access.
-		return AccessTypeNone
+		return AccessLevelNone
 	case RepoTypeOrgConfig:
 		org := c.Orgs[repo.PathParts[0]]
 		if c.checkListsForUser(user.Username, org.Admin) {
-			return AccessTypeAdmin
+			return AccessLevelAdmin
 		}
 
-		return AccessTypeNone
+		return AccessLevelNone
 	case RepoTypeOrg:
 		org := c.Orgs[repo.PathParts[0]]
 
 		// Because we already checked to see if this repo exists, this user has
 		// admin on the repo if they're an org admin.
 		if c.checkListsForUser(user.Username, org.Admin) {
-			return AccessTypeAdmin
+			return AccessLevelAdmin
 		}
 
 		repo := org.Repos[repo.PathParts[1]]
@@ -118,34 +118,34 @@ func (c *Config) checkUserRepoAccess(user *User, repo *RepoLookup) AccessType { 
 			if c.Options.ImplicitRepos {
 				switch {
 				case c.checkListsForUser(user.Username, org.Write):
-					return AccessTypeWrite
+					return AccessLevelWrite
 				case c.checkListsForUser(user.Username, org.Read):
-					return AccessTypeRead
+					return AccessLevelRead
 				}
 			}
 
-			return AccessTypeNone
+			return AccessLevelNone
 		}
 
 		switch {
 		case c.checkListsForUser(user.Username, org.Write, repo.Write):
-			return AccessTypeWrite
+			return AccessLevelWrite
 		case c.checkListsForUser(user.Username, org.Read, repo.Read):
-			return AccessTypeRead
+			return AccessLevelRead
 		}
 
-		return AccessTypeNone
+		return AccessLevelNone
 	case RepoTypeUserConfig:
 		if repo.PathParts[0] == user.Username {
-			return AccessTypeAdmin
+			return AccessLevelAdmin
 		}
 
-		return AccessTypeNone
+		return AccessLevelNone
 	case RepoTypeUser:
 		// Because we already checked to see if this repo exists, the user has
 		// admin on the repo if they own the repo.
 		if repo.PathParts[0] == user.Username {
-			return AccessTypeAdmin
+			return AccessLevelAdmin
 		}
 
 		userConfig := c.Users[repo.PathParts[0]]
@@ -154,29 +154,29 @@ func (c *Config) checkUserRepoAccess(user *User, repo *RepoLookup) AccessType { 
 		// Only the given user has access to implicit repos, so if the repo
 		// isn't explicitly defined, noone else has access.
 		if repo == nil {
-			return AccessTypeNone
+			return AccessLevelNone
 		}
 
 		switch {
 		case c.checkListsForUser(user.Username, repo.Write):
-			return AccessTypeWrite
+			return AccessLevelWrite
 		case c.checkListsForUser(user.Username, repo.Read):
-			return AccessTypeRead
+			return AccessLevelRead
 		}
 	case RepoTypeTopLevel:
 		repo := c.Repos[repo.PathParts[0]]
 		if repo == nil {
 			// Only admins have access to implicitly created top-level repos.
-			return AccessTypeNone
+			return AccessLevelNone
 		}
 
 		switch {
 		case c.checkListsForUser(user.Username, repo.Write):
-			return AccessTypeWrite
+			return AccessLevelWrite
 		case c.checkListsForUser(user.Username, repo.Read):
-			return AccessTypeRead
+			return AccessLevelRead
 		}
 	}
 
-	return AccessTypeNone
+	return AccessLevelNone
 }
