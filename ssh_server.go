@@ -58,7 +58,7 @@ func (serv *Server) Reload() error {
 	config := NewConfig(serv.fs)
 
 	// Load the config from master
-	err := config.Load()
+	err := config.Load("")
 	if err != nil {
 		return err
 	}
@@ -66,7 +66,7 @@ func (serv *Server) Reload() error {
 	serv.config = config
 
 	// Load all ssh keys into the actual ssh server.
-	for _, key := range serv.config.PrivateKeys {
+	for _, key := range serv.config.pks {
 		signer, err := gossh.NewSignerFromSigner(key)
 		if err != nil {
 			return err
@@ -130,14 +130,14 @@ func (serv *Server) handlePublicKey(ctx ssh.Context, incomingKey ssh.PublicKey) 
 		}
 	*/
 
-	user, err := config.LookupUserFromKey(pk, remoteUser)
+	user, err := config.LookupUserFromPublicKey(pk, remoteUser)
 	if err != nil {
 		slog.Warn().Err(err).Msg("User not found")
 		return false
 	}
 
 	// Update the context with what we discovered
-	CtxSetUser(ctx, user)
+	CtxSetUserSession(ctx, user)
 	CtxSetConfig(ctx, config)
 	CtxSetLogger(ctx, &slog)
 	CtxSetPublicKey(ctx, &pk)

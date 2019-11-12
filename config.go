@@ -1,6 +1,8 @@
 package gitdir
 
 import (
+	"sync"
+
 	"gopkg.in/src-d/go-billy.v4"
 
 	"github.com/belak/go-gitdir/internal/git"
@@ -9,23 +11,17 @@ import (
 
 // Config represents the config which has been loaded from all repos.
 type Config struct {
-	Invites     map[string]string
-	Groups      map[string][]string
-	Orgs        map[string]*models.OrgConfig
-	Users       map[string]*models.AdminConfigUser
-	Repos       map[string]*models.RepoConfig
-	Options     models.AdminConfigOptions
-	PrivateKeys []models.PrivateKey
+	fs   billy.Filesystem
+	lock *sync.RWMutex
 
 	// Internal state
-	fs         billy.Filesystem
-	publicKeys map[string]string `yaml:"-"`
+	adminConfig *models.AdminConfig
+	orgs        map[string]*models.OrgConfig
+	users       map[string]*models.UserConfig
+	pks         []models.PrivateKey
 
-	// We store any override hashes for repos so this can be used for hooks as
-	// well.
-	adminRepoHash string
-	orgRepos      map[string]string
-	userRepos     map[string]string
+	// Cache
+	publicKeys map[string]string `yaml:"-"`
 }
 
 // NewConfig returns an empty config, attached to the given fs. In general, this
@@ -42,30 +38,32 @@ type Config struct {
 // }
 func NewConfig(fs billy.Filesystem) *Config {
 	return &Config{
-		Invites: make(map[string]string),
-		Groups:  make(map[string][]string),
-		Orgs:    make(map[string]*models.OrgConfig),
-		Users:   make(map[string]*models.AdminConfigUser),
-		Repos:   make(map[string]*models.RepoConfig),
+		fs:   fs,
+		lock: &sync.RWMutex{},
 
-		orgRepos:   make(map[string]string),
-		userRepos:  make(map[string]string),
+		// Start with a blank admin config.
+		adminConfig: models.NewAdminConfig(),
+
+		// All loaded user configs
+		orgs:  make(map[string]*models.OrgConfig),
+		users: make(map[string]*models.UserConfig),
+
+		// Cache of all public keys
 		publicKeys: make(map[string]string),
-
-		Options: models.DefaultAdminConfigOptions,
-
-		fs: fs,
 	}
 }
 
-// Load will load the config from the given fs, including any hash overrides.
-func (c *Config) Load() error {
+// Load will load the config at the given hash.
+func (c *Config) Load(hash string) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	adminRepo, err := git.EnsureRepo(c.fs, "admin/admin")
 	if err != nil {
 		return err
 	}
 
-	err = adminRepo.Checkout(c.adminRepoHash)
+	err = adminRepo.Checkout(hash)
 	if err != nil {
 		return err
 	}
@@ -113,61 +111,74 @@ func (c *Config) Load() error {
 }
 
 func (c *Config) flatten() {
+	// Clear out all existing public keys.
+	c.publicKeys = make(map[string]string)
+
 	// Add all user public keys to the config.
-	for username, user := range c.Users {
+	if c.adminConfig.Options.UserConfigKeys {
+		for username, user := range c.adminConfig.Users {
+			for _, key := range user.Keys {
+				c.publicKeys[key.RawMarshalAuthorizedKey()] = username
+			}
+		}
+	}
+
+	for username, user := range c.adminConfig.Users {
 		for _, key := range user.Keys {
+			// TODO: warn if there are any conflicting keys
 			c.publicKeys[key.RawMarshalAuthorizedKey()] = username
 		}
 	}
 }
 
-// SetHash will set the hash of the admin repo to use when loading.
-func (c *Config) SetHash(hash string) error {
-	adminRepo, err := git.EnsureRepo(c.fs, "admin/admin")
-	if err != nil {
-		return err
+func (c *Config) lookupOrgConfig(orgName string) (*models.OrgConfig, bool) {
+	ret, ok := c.adminConfig.Orgs[orgName]
+	if !ok {
+		return models.NewOrgConfig(), false
 	}
 
-	err = adminRepo.Checkout(hash)
-	if err != nil {
-		return err
+	if c.adminConfig.Options.OrgConfig {
+		orgConfig, ok := c.orgs[orgName]
+		if !ok {
+			return ret, false
+		}
+
+		ret.Admin = append(ret.Admin, orgConfig.Admin...)
+		ret.Write = append(ret.Write, orgConfig.Write...)
+		ret.Read = append(ret.Read, orgConfig.Read...)
+		ret.Repos = models.MergeRepoMaps(ret.Repos, orgConfig.Repos)
 	}
 
-	c.adminRepoHash = hash
-
-	return nil
+	return ret, true
 }
 
-// SetUserHash will set the hash of the given user repo to use when loading.
-func (c *Config) SetUserHash(username, hash string) error {
-	repo, err := git.EnsureRepo(c.fs, "admin/user-"+username)
-	if err != nil {
-		return err
+func (c *Config) lookupUserConfig(username string) (*models.UserConfig, bool) {
+	ret := models.NewUserConfig()
+
+	adminUser, ok := c.adminConfig.Users[username]
+	if !ok {
+		return ret, false
 	}
 
-	err = repo.Checkout(hash)
-	if err != nil {
-		return err
+	// Initial values can just be a reference. Because the types don't line up,
+	// we unfortunately can't just replace the value.
+	ret.Repos = adminUser.Repos
+	ret.Keys = adminUser.Keys
+
+	userConfig, ok := c.users[username]
+	if !ok {
+		// We have a valid config at this point if we don't need to load
+		// anything from the user config.
+		return ret, !(c.adminConfig.Options.UserConfigRepos || c.adminConfig.Options.UserConfigKeys)
 	}
 
-	c.userRepos[username] = hash
-
-	return nil
-}
-
-// SetOrgHash will set the hash of the given org repo to use when loading.
-func (c *Config) SetOrgHash(orgName, hash string) error {
-	repo, err := git.EnsureRepo(c.fs, "admin/org-"+orgName)
-	if err != nil {
-		return err
+	if c.adminConfig.Options.UserConfigRepos {
+		ret.Repos = models.MergeRepoMaps(ret.Repos, userConfig.Repos)
 	}
 
-	err = repo.Checkout(hash)
-	if err != nil {
-		return err
+	if c.adminConfig.Options.UserConfigKeys {
+		ret.Keys = append(ret.Keys, userConfig.Keys...)
 	}
 
-	c.orgRepos[orgName] = hash
-
-	return nil
+	return ret, true
 }

@@ -16,7 +16,7 @@ func (c *Config) RunHook(
 	args []string,
 	stdin io.Reader,
 ) error {
-	user, err := c.LookupUserFromKey(*pk, c.Options.GitUser)
+	user, err := c.LookupUserFromPublicKey(*pk, c.adminConfig.Options.GitUser)
 	if err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ func (c *Config) RunHook(
 
 func (c *Config) runUpdateHook(
 	lookup *RepoLookup,
-	user *User,
+	user *UserSession,
 	pk *models.PublicKey,
 	oldHash string,
 	newHash string,
@@ -62,21 +62,16 @@ func (c *Config) runUpdateHook(
 
 	switch lookup.Type {
 	case RepoTypeAdmin:
-		err = c.SetHash(newHash)
+		err = c.Load(newHash)
 	case RepoTypeOrgConfig:
-		err = c.SetOrgHash(lookup.PathParts[0], newHash)
+		err = c.LoadOrg(lookup.PathParts[0], newHash)
 	case RepoTypeUserConfig:
-		err = c.SetUserHash(lookup.PathParts[0], newHash)
+		err = c.LoadUser(lookup.PathParts[0], newHash)
 	default:
 		// Non-admin repos don't need this hook.
 		return nil
 	}
 
-	if err != nil {
-		return err
-	}
-
-	err = c.Load()
 	if err != nil {
 		return err
 	}

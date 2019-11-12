@@ -30,57 +30,66 @@ func newTestConfig() *Config { //nolint:funlen
 	c := NewConfig(memfs.New())
 
 	// Define some basic users
-	c.Users["an-admin"] = models.NewAdminConfigUser()
-	c.Users["an-admin"].IsAdmin = true
-	c.Users["an-admin"].Keys = []models.PublicKey{
+	c.adminConfig.Users["an-admin"] = models.NewAdminConfigUser()
+	c.adminConfig.Users["an-admin"].IsAdmin = true
+	c.adminConfig.Users["an-admin"].Keys = []models.PublicKey{
 		mustParsePK("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILQGpcX2owFW6hdTWHa/CzbTwhUJlmI8gKAgnp/c0NK2 an-admin"),
 	}
+	c.users["an-admin"] = models.NewUserConfig()
 
-	c.Users["non-admin"] = models.NewAdminConfigUser()
-	c.Users["non-admin"].Repos["test-repo"] = newTestRepoConfig()
+	c.adminConfig.Users["non-admin"] = models.NewAdminConfigUser()
+	c.adminConfig.Users["non-admin"].Repos["test-repo"] = newTestRepoConfig()
+	c.users["non-admin"] = models.NewUserConfig()
 
 	// Org-level permissions
-	c.Users["org-admin"] = models.NewAdminConfigUser()
-	c.Users["org-write"] = models.NewAdminConfigUser()
-	c.Users["org-read"] = models.NewAdminConfigUser()
+	c.adminConfig.Users["org-admin"] = models.NewAdminConfigUser()
+	c.users["org-admin"] = models.NewUserConfig()
+	c.adminConfig.Users["org-write"] = models.NewAdminConfigUser()
+	c.users["org-write"] = models.NewUserConfig()
+	c.adminConfig.Users["org-read"] = models.NewAdminConfigUser()
+	c.users["org-read"] = models.NewUserConfig()
 
 	// Repo-level permissions
-	c.Users["read-user"] = models.NewAdminConfigUser()
-	c.Users["write-user"] = models.NewAdminConfigUser()
-	c.Users["nothing-user"] = models.NewAdminConfigUser()
+	c.adminConfig.Users["read-user"] = models.NewAdminConfigUser()
+	c.users["read-user"] = models.NewUserConfig()
+	c.adminConfig.Users["write-user"] = models.NewAdminConfigUser()
+	c.users["write-user"] = models.NewUserConfig()
+	c.adminConfig.Users["nothing-user"] = models.NewAdminConfigUser()
 
-	c.Users["disabled"] = models.NewAdminConfigUser()
-	c.Users["disabled"].Disabled = true
-	c.Users["disabled"].Keys = []models.PublicKey{
+	c.adminConfig.Users["disabled"] = models.NewAdminConfigUser()
+	c.adminConfig.Users["disabled"].Disabled = true
+	c.adminConfig.Users["disabled"].Keys = []models.PublicKey{
 		mustParsePK("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBx4DYr9m+EnG0tgFsUIZqrDP7pa+vpVXJJ6/PE9J7Ll disabled"),
 	}
+	c.users["disabled"] = models.NewUserConfig()
 
 	// Basic group
-	c.Groups["admins"] = []string{"an-admin"}
-	c.Groups["nested-admins"] = []string{"$admins"}
+	c.adminConfig.Groups["admins"] = []string{"an-admin"}
+	c.adminConfig.Groups["nested-admins"] = []string{"$admins"}
 
 	// Group loop
-	c.Groups["loop"] = []string{"$loop1"}
-	c.Groups["loop1"] = []string{"$loop2"}
-	c.Groups["loop2"] = []string{"$loop1"}
+	c.adminConfig.Groups["loop"] = []string{"$loop1"}
+	c.adminConfig.Groups["loop1"] = []string{"$loop2"}
+	c.adminConfig.Groups["loop2"] = []string{"$loop1"}
 
 	// Basic org
-	c.Orgs["an-org"] = models.NewOrgConfig()
-	c.Orgs["an-org"].Admin = []string{"org-admin"}
-	c.Orgs["an-org"].Write = []string{"org-write"}
-	c.Orgs["an-org"].Read = []string{"org-read"}
-	c.Orgs["an-org"].Repos["test-repo"] = newTestRepoConfig()
+	c.adminConfig.Orgs["an-org"] = models.NewOrgConfig()
+	c.adminConfig.Orgs["an-org"].Admin = []string{"org-admin"}
+	c.adminConfig.Orgs["an-org"].Write = []string{"org-write"}
+	c.adminConfig.Orgs["an-org"].Read = []string{"org-read"}
+	c.adminConfig.Orgs["an-org"].Repos["test-repo"] = newTestRepoConfig()
+	c.orgs["an-org"] = models.NewOrgConfig()
 
-	c.Repos["test-repo"] = newTestRepoConfig()
+	c.adminConfig.Repos["test-repo"] = newTestRepoConfig()
 
-	c.Invites["valid-invite"] = "an-admin"
-	c.Invites["user-missing"] = "invalid-user"
-	c.Invites["user-disabled"] = "disabled"
+	c.adminConfig.Invites["valid-invite"] = "an-admin"
+	c.adminConfig.Invites["user-missing"] = "invalid-user"
+	c.adminConfig.Invites["user-disabled"] = "disabled"
 
 	// Force all settings repos to "on"
-	c.Options.UserConfigRepos = true
-	c.Options.OrgConfig = true
-	c.Options.OrgConfigRepos = true
+	c.adminConfig.Options.UserConfigRepos = true
+	c.adminConfig.Options.OrgConfig = true
+	c.adminConfig.Options.OrgConfigRepos = true
 
 	c.flatten()
 
@@ -220,7 +229,7 @@ func TestRepoLookup(t *testing.T) { //nolint:funlen
 			continue
 		}
 
-		require.Nil(t, err)
+		require.Nil(t, err, "Failed to load repo: %q", test.Lookup)
 
 		assert.Equal(t, test.Type, lookup.Type)
 		assert.Equal(t, test.Path, lookup.Path())
@@ -274,14 +283,14 @@ type allImplicitAccessLevels struct {
 	TopLevel AccessLevel
 }
 
-func lookupAndCheck(t *testing.T, c *Config, u *User, path string, access AccessLevel) {
+func lookupAndCheck(t *testing.T, c *Config, u *UserSession, path string, access AccessLevel) {
 	repo, err := c.LookupRepoAccess(u, path)
 	require.Nil(t, err)
 	require.NotNil(t, repo)
 	assert.Equal(t, access, repo.Access)
 }
 
-func testCheckRepoAccess(t *testing.T, c *Config, u *User, access allRepoAccessLevels) {
+func testCheckRepoAccess(t *testing.T, c *Config, u *UserSession, access allRepoAccessLevels) {
 	lookupAndCheck(t, c, u, "admin", access.Admin)
 	lookupAndCheck(t, c, u, "@an-org", access.OrgConfig)
 	lookupAndCheck(t, c, u, "@an-org/test-repo", access.OrgRepo)
@@ -290,14 +299,14 @@ func testCheckRepoAccess(t *testing.T, c *Config, u *User, access allRepoAccessL
 	lookupAndCheck(t, c, u, "test-repo", access.TopLevel)
 }
 
-func testImplicitRepoAccess(t *testing.T, c *Config, u *User, access allImplicitAccessLevels) {
-	prevImplicit := c.Options.ImplicitRepos
+func testImplicitRepoAccess(t *testing.T, c *Config, u *UserSession, access allImplicitAccessLevels) {
+	prevImplicit := c.adminConfig.Options.ImplicitRepos
 
 	defer func() {
-		c.Options.ImplicitRepos = prevImplicit
+		c.adminConfig.Options.ImplicitRepos = prevImplicit
 	}()
 
-	c.Options.ImplicitRepos = true
+	c.adminConfig.Options.ImplicitRepos = true
 
 	lookupAndCheck(t, c, u, "@an-org/implicit", access.Org)
 	lookupAndCheck(t, c, u, "~non-admin/implicit", access.User)
@@ -422,15 +431,20 @@ func TestCheckUserRepoAccess(t *testing.T) { //nolint:funlen
 	}
 
 	for _, test := range tests {
-		user, err := c.LookupUserFromUsername(test.Username)
-		require.Nil(t, err)
+		user, ok := c.adminConfig.Users[test.Username]
+		require.True(t, ok)
 
-		testCheckRepoAccess(t, c, user, test.Access)
-		testImplicitRepoAccess(t, c, user, test.ImplicitAccess)
+		session := &UserSession{
+			Username: test.Username,
+			IsAdmin:  user.IsAdmin,
+		}
+
+		testCheckRepoAccess(t, c, session, test.Access)
+		testImplicitRepoAccess(t, c, session, test.ImplicitAccess)
 	}
 
 	// One special test case to check a repo that doesn't exist.
-	repo, err := c.LookupRepoAccess(&User{Username: "an-admin", IsAdmin: true}, "invalid-repo")
+	repo, err := c.LookupRepoAccess(&UserSession{Username: "an-admin", IsAdmin: true}, "invalid-repo")
 	require.Equal(t, ErrRepoDoesNotExist, err)
 	require.Nil(t, repo)
 }

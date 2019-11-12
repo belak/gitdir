@@ -70,7 +70,7 @@ func TestCtxExtract(t *testing.T) {
 
 	assert.Equal(t, &log.Logger, logger)
 	assert.Equal(t, NewConfig(nil), config)
-	assert.Equal(t, AnonymousUser, user)
+	assert.Equal(t, AnonymousUserSession, user)
 }
 
 func TestCtxSetConfig(t *testing.T) {
@@ -101,21 +101,21 @@ func TestCtxSetUser(t *testing.T) {
 	t.Parallel()
 }
 
-func TestCtxUser(t *testing.T) {
+func TestCtxUserSession(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 
 	// Check the default value
-	assert.Equal(t, AnonymousUser, CtxUser(ctx))
+	assert.Equal(t, AnonymousUserSession, CtxUserSession(ctx))
 
 	// Check that when we set a value, this properly extracts it.
-	user := &User{
+	user := &UserSession{
 		Username: "belak",
 		IsAdmin:  true,
 	}
 	ctx = context.WithValue(ctx, contextKeyUser, user)
-	assert.Equal(t, user, CtxUser(ctx))
+	assert.Equal(t, user, CtxUserSession(ctx))
 }
 
 func TestCtxSetLogger(t *testing.T) {

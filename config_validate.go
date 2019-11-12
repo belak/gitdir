@@ -9,7 +9,7 @@ import (
 )
 
 // Validate will ensure the config is valid and return any errors.
-func (c *Config) Validate(user *User, pk *models.PublicKey) error {
+func (c *Config) Validate(user *UserSession, pk *models.PublicKey) error {
 	return newMultiError(
 		c.validateUser(user),
 		c.validatePublicKey(pk),
@@ -18,8 +18,8 @@ func (c *Config) Validate(user *User, pk *models.PublicKey) error {
 	)
 }
 
-func (c *Config) validateUser(u *User) error {
-	if _, ok := c.Users[u.Username]; !ok {
+func (c *Config) validateUser(u *UserSession) error {
+	if _, ok := c.adminConfig.Users[u.Username]; !ok {
 		return fmt.Errorf("cannot remove current user: %s", u.Username)
 	}
 
@@ -35,7 +35,7 @@ func (c *Config) validatePublicKey(pk *models.PublicKey) error {
 }
 
 func (c *Config) validateAdmins() error {
-	for _, user := range c.Users {
+	for _, user := range c.adminConfig.Users {
 		if user.IsAdmin {
 			return nil
 		}
@@ -48,7 +48,7 @@ func (c *Config) validateGroupLoop() error {
 	var errors []error
 
 	// Essentially this is "do a tree traversal on the groups"
-	for groupName := range c.Groups {
+	for groupName := range c.adminConfig.Groups {
 		errors = append(errors, c.validateGroupLoopInternal(groupName, nil))
 	}
 
@@ -63,7 +63,7 @@ func (c *Config) validateGroupLoopInternal(groupName string, groupPath []string)
 
 	groupPath = append(groupPath, groupName)
 
-	for _, lookup := range c.Groups[groupName] {
+	for _, lookup := range c.adminConfig.Groups[groupName] {
 		if strings.HasPrefix(lookup, groupPrefix) {
 			intGroupName := strings.TrimPrefix(lookup, groupPrefix)
 

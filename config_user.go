@@ -6,15 +6,18 @@ import (
 )
 
 func (c *Config) loadUserConfigs() error {
+	// Clear out any existing user configs
+	c.users = make(map[string]*models.UserConfig)
+
 	// Bail early if we don't need to load anything.
-	if !c.Options.UserConfigKeys && !c.Options.UserConfigRepos {
+	if !c.adminConfig.Options.UserConfigKeys && !c.adminConfig.Options.UserConfigRepos {
 		return nil
 	}
 
 	var errors []error
 
-	for username := range c.Users {
-		errors = append(errors, c.loadUserConfig(username))
+	for username := range c.adminConfig.Users {
+		errors = append(errors, c.loadUserInternal(username, ""))
 	}
 
 	// Because we want to display all the errors, we return this as a
@@ -22,13 +25,20 @@ func (c *Config) loadUserConfigs() error {
 	return newMultiError(errors...)
 }
 
-func (c *Config) loadUserConfig(username string) error {
+func (c *Config) LoadUser(username string, hash string) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	return c.loadUserInternal(username, hash)
+}
+
+func (c *Config) loadUserInternal(username string, hash string) error {
 	userRepo, err := git.EnsureRepo(c.fs, "admin/user-"+username)
 	if err != nil {
 		return err
 	}
 
-	err = userRepo.Checkout(c.userRepos[username])
+	err = userRepo.Checkout(hash)
 	if err != nil {
 		return err
 	}
@@ -44,23 +54,10 @@ func (c *Config) loadUserConfig(username string) error {
 			return err
 		}
 
-		if c.Options.UserConfigKeys {
-			c.Users[username].Keys = append(c.Users[username].Keys, userConfig.Keys...)
-		}
-
-		if c.Options.UserConfigRepos {
-			for repoName, repo := range userConfig.Repos {
-				// If it's already defined, skip it.
-				//
-				// TODO: this should throw a validation error
-				if _, ok := c.Users[username].Repos[repoName]; ok {
-					continue
-				}
-
-				c.Users[username].Repos[repoName] = repo
-			}
-		}
+		c.users[username] = userConfig
 	}
+
+	c.flatten()
 
 	return nil
 }

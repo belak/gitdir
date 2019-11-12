@@ -31,3 +31,27 @@ func ParseUserConfig(data []byte) (*UserConfig, error) {
 
 	return uc, nil
 }
+
+func MergeUserConfigs(configs ...*UserConfig) *UserConfig {
+	var found bool
+
+	// Start with an empty user config.
+	ret := NewUserConfig()
+
+	for _, config := range configs {
+		if config == nil {
+			continue
+		}
+
+		found = true
+
+		ret.Repos = MergeRepoMaps(ret.Repos, config.Repos)
+		ret.Keys = append(ret.Keys, config.Keys...)
+	}
+
+	if !found {
+		return nil
+	}
+
+	return ret
+}

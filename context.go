@@ -25,8 +25,8 @@ const (
 
 // CtxExtract is a convenience wrapper around the other context convenience
 // methods to pull out everything you'd want from a request.
-func CtxExtract(ctx context.Context) (*zerolog.Logger, *Config, *User) {
-	return CtxLogger(ctx), CtxConfig(ctx), CtxUser(ctx)
+func CtxExtract(ctx context.Context) (*zerolog.Logger, *Config, *UserSession) {
+	return CtxLogger(ctx), CtxConfig(ctx), CtxUserSession(ctx)
 }
 
 // CtxSetConfig puts the given Config into the ssh.Context.
@@ -46,18 +46,18 @@ func CtxConfig(ctx context.Context) *Config {
 }
 
 // CtxSetUser puts the given User into the ssh.Context.
-func CtxSetUser(parent ssh.Context, user *User) {
+func CtxSetUserSession(parent ssh.Context, user *UserSession) {
 	parent.SetValue(contextKeyUser, user)
 }
 
 // CtxUser pulls the current User out of the context, or AnonymousUser if not
 // set.
-func CtxUser(ctx context.Context) *User {
-	if u, ok := ctx.Value(contextKeyUser).(*User); ok {
+func CtxUserSession(ctx context.Context) *UserSession {
+	if u, ok := ctx.Value(contextKeyUser).(*UserSession); ok {
 		return u
 	}
 
-	return AnonymousUser
+	return AnonymousUserSession
 }
 
 // WithLogger takes a parent context and a logger and returns a new context

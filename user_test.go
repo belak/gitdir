@@ -8,37 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLookupUserFromUsername(t *testing.T) {
-	t.Parallel()
-
-	c := newTestConfig()
-
-	var tests = []struct {
-		Username string
-		Error    error
-	}{
-		{
-			"missing-user",
-			ErrUserNotFound,
-		},
-		{
-			"disabled",
-			ErrUserNotFound,
-		},
-	}
-
-	for _, test := range tests {
-		user, err := c.LookupUserFromUsername(test.Username)
-
-		if test.Error != nil {
-			require.Equal(t, test.Error, err)
-		} else {
-			assert.Nil(t, err)
-			assert.Equal(t, test.Username, user.Username)
-		}
-	}
-}
-
 func TestLookupUserFromKey(t *testing.T) { //nolint:funlen
 	t.Parallel()
 
@@ -95,7 +64,7 @@ func TestLookupUserFromKey(t *testing.T) { //nolint:funlen
 		require.Nil(t, err)
 
 		// Try with the username hint
-		user, err := c.LookupUserFromKey(*pk, test.UserHint)
+		user, err := c.LookupUserFromPublicKey(*pk, test.UserHint)
 
 		if test.Error != nil {
 			require.Equal(t, test.Error, err)
@@ -105,7 +74,7 @@ func TestLookupUserFromKey(t *testing.T) { //nolint:funlen
 		}
 
 		// Try without the username hint
-		user, err = c.LookupUserFromKey(*pk, c.Options.GitUser)
+		user, err = c.LookupUserFromPublicKey(*pk, c.adminConfig.Options.GitUser)
 
 		if test.ErrorGitUser != nil {
 			require.Equal(t, test.ErrorGitUser, err)

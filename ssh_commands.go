@@ -11,7 +11,8 @@ import (
 )
 
 func cmdWhoami(ctx context.Context, s ssh.Session, cmd []string) int { //nolint:interfacer
-	user := CtxUser(ctx)
+	user := CtxUserSession(ctx)
+
 	_ = writeStringFmt(s, "logged in as %s\r\n", user.Username)
 
 	return 0

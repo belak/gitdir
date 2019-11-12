@@ -6,15 +6,18 @@ import (
 )
 
 func (c *Config) loadOrgConfigs() error {
+	// Clear out any existing org configs
+	c.orgs = make(map[string]*models.OrgConfig)
+
 	// Bail early if we don't need to load anything.
-	if !c.Options.OrgConfig {
+	if !c.adminConfig.Options.OrgConfig {
 		return nil
 	}
 
 	var errors []error
 
-	for orgName := range c.Orgs {
-		errors = append(errors, c.loadOrgConfig(orgName))
+	for orgName := range c.adminConfig.Orgs {
+		errors = append(errors, c.loadOrgInternal(orgName, ""))
 	}
 
 	// Because we want to display all the errors, we return this as a
@@ -22,13 +25,20 @@ func (c *Config) loadOrgConfigs() error {
 	return newMultiError(errors...)
 }
 
-func (c *Config) loadOrgConfig(orgName string) error {
+func (c *Config) LoadOrg(orgName string, hash string) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	return c.loadOrgInternal(orgName, hash)
+}
+
+func (c *Config) loadOrgInternal(orgName string, hash string) error {
 	orgRepo, err := git.EnsureRepo(c.fs, "admin/org-"+orgName)
 	if err != nil {
 		return err
 	}
 
-	err = orgRepo.Checkout(c.orgRepos[orgName])
+	err = orgRepo.Checkout(hash)
 	if err != nil {
 		return err
 	}
@@ -43,22 +53,9 @@ func (c *Config) loadOrgConfig(orgName string) error {
 		return err
 	}
 
-	c.Orgs[orgName].Admin = append(c.Orgs[orgName].Admin, orgConfig.Admin...)
-	c.Orgs[orgName].Write = append(c.Orgs[orgName].Write, orgConfig.Write...)
-	c.Orgs[orgName].Read = append(c.Orgs[orgName].Read, orgConfig.Read...)
+	c.orgs[orgName] = orgConfig
 
-	if c.Options.OrgConfigRepos {
-		for repoName, repo := range orgConfig.Repos {
-			// If it's already defined, skip it.
-			//
-			// TODO: this should throw a validation error
-			if _, ok := c.Orgs[orgName].Repos[repoName]; ok {
-				continue
-			}
-
-			c.Orgs[orgName].Repos[repoName] = repo
-		}
-	}
+	c.flatten()
 
 	return nil
 }

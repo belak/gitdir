@@ -18,3 +18,44 @@ type RepoConfig struct {
 func NewRepoConfig() *RepoConfig {
 	return &RepoConfig{}
 }
+
+func MergeRepoConfigs(configs ...*RepoConfig) *RepoConfig {
+	var found bool
+
+	ret := NewRepoConfig()
+
+	for _, config := range configs {
+		if config == nil {
+			continue
+		}
+
+		found = true
+
+		ret.Public = ret.Public || config.Public
+		ret.Write = append(ret.Write, config.Write...)
+		ret.Read = append(ret.Read, config.Read...)
+	}
+
+	if !found {
+		return nil
+	}
+
+	return ret
+}
+
+func MergeRepoMaps(configs ...map[string]*RepoConfig) map[string]*RepoConfig {
+	ret := make(map[string]*RepoConfig)
+
+	for _, config := range configs {
+		for repoName, repo := range config {
+			retRepo := MergeRepoConfigs(ret[repoName], repo)
+			if retRepo == nil {
+				continue
+			}
+
+			ret[repoName] = retRepo
+		}
+	}
+
+	return ret
+}

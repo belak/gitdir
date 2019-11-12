@@ -32,3 +32,29 @@ func ParseOrgConfig(data []byte) (*OrgConfig, error) {
 
 	return oc, nil
 }
+
+func MergeOrgConfigs(configs ...*OrgConfig) *OrgConfig {
+	var found bool
+
+	// Start with an empty org config.
+	ret := NewOrgConfig()
+
+	for _, config := range configs {
+		if config == nil {
+			continue
+		}
+
+		found = true
+
+		ret.Admin = append(ret.Admin, config.Admin...)
+		ret.Write = append(ret.Write, config.Write...)
+		ret.Read = append(ret.Read, config.Read...)
+		ret.Repos = MergeRepoMaps(ret.Repos, config.Repos)
+	}
+
+	if !found {
+		return nil
+	}
+
+	return ret
+}

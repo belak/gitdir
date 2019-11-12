@@ -7,16 +7,18 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// User is the internal representation of a user. This data is copied from the
-// loaded config file.
-type User struct {
+// UserSession is the internal representation of a user. This data is copied
+// from the loaded config file and tagged with the PublicKey used in this
+// session.
+type UserSession struct {
 	Username    string
 	IsAnonymous bool
 	IsAdmin     bool
+
+	PublicKey models.PublicKey
 }
 
-// AnonymousUser is the user that is returned when no user is available.
-var AnonymousUser = &User{
+var AnonymousUserSession = &UserSession{
 	Username:    "<anonymous>",
 	IsAnonymous: true,
 }
@@ -24,78 +26,66 @@ var AnonymousUser = &User{
 // ErrUserNotFound is returned from LookupUser commands when
 var ErrUserNotFound = errors.New("user not found")
 
-// LookupUserFromUsername looks up a user objects given their username.
-func (c *Config) LookupUserFromUsername(username string) (*User, error) {
-	userConfig, ok := c.Users[username]
-	if !ok {
-		log.Warn().Msg("username does not match a user")
-		return AnonymousUser, ErrUserNotFound
-	}
-
-	if userConfig.Disabled {
-		log.Warn().Msg("user is disabled")
-		return AnonymousUser, ErrUserNotFound
-	}
-
-	return &User{
-		Username:    username,
-		IsAnonymous: false,
-		IsAdmin:     userConfig.IsAdmin,
-	}, nil
-}
-
 // LookupUserFromKey looks up a user object given their PublicKey.
-func (c *Config) LookupUserFromKey(pk models.PublicKey, remoteUser string) (*User, error) {
+func (c *Config) LookupUserFromPublicKey(pk models.PublicKey, usernameHint string) (*UserSession, error) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
 	username, ok := c.publicKeys[pk.RawMarshalAuthorizedKey()]
 	if !ok {
 		log.Warn().Msg("key does not exist")
-		return AnonymousUser, ErrUserNotFound
+		return nil, ErrUserNotFound
 	}
 
-	userConfig, ok := c.Users[username]
+	userConfig, ok := c.adminConfig.Users[username]
 	if !ok {
 		log.Warn().Msg("key does not match a user")
-		return AnonymousUser, ErrUserNotFound
+		return nil, ErrUserNotFound
 	}
 
 	if userConfig.Disabled {
 		log.Warn().Msg("user is disabled")
-		return AnonymousUser, ErrUserNotFound
+		return nil, ErrUserNotFound
 	}
 
 	// If they weren't the git user make sure their username matches their key.
-	if remoteUser != c.Options.GitUser && remoteUser != username {
+	if usernameHint != c.adminConfig.Options.GitUser && usernameHint != username {
 		log.Warn().Msg("key belongs to different user")
-		return AnonymousUser, ErrUserNotFound
+		return nil, ErrUserNotFound
 	}
 
-	return &User{
+	return &UserSession{
 		Username:    username,
 		IsAnonymous: false,
 		IsAdmin:     userConfig.IsAdmin,
+
+		PublicKey: pk,
 	}, nil
 }
 
 // LookupUserFromInvite looks up a user object given an invite code.
-func (c *Config) LookupUserFromInvite(invite string) (*User, error) {
-	username, ok := c.Invites[invite]
+func (c *Config) LookupUserFromInvite(invite string) (*UserSession, error) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	username, ok := c.adminConfig.Invites[invite]
 	if !ok {
 		log.Warn().Msg("invite does not exist")
-		return AnonymousUser, ErrUserNotFound
+		return nil, ErrUserNotFound
 	}
 
-	userConfig, ok := c.Users[username]
+	userConfig, ok := c.adminConfig.Users[username]
 	if !ok {
 		log.Warn().Msg("invite does not match a user")
-		return AnonymousUser, ErrUserNotFound
+		return nil, ErrUserNotFound
 	}
 
 	if userConfig.Disabled {
 		log.Warn().Msg("user is disabled")
-		return AnonymousUser, ErrUserNotFound
+		return nil, ErrUserNotFound
 	}
 
-	return &User{
+	return &UserSession{
 		Username:    username,
 		IsAnonymous: false,
 		IsAdmin:     userConfig.IsAdmin,

@@ -58,17 +58,8 @@ func (c *Config) loadAdminConfig(adminRepo *git.Repository) error {
 		return err
 	}
 
-	// Merge the adminConfig with the base config. Note that this will reset all
-	// values.
-	c.Invites = adminConfig.Invites
-	c.Groups = adminConfig.Groups
-	c.Orgs = adminConfig.Orgs
-	c.Users = adminConfig.Users
-	c.Repos = adminConfig.Repos
-	c.Options = adminConfig.Options
-
 	// Load the private keys
-	c.PrivateKeys = nil
+	var pks []models.PrivateKey
 
 	keyData, err := adminRepo.GetFile("ssh/id_ed25519")
 	if err != nil {
@@ -80,7 +71,7 @@ func (c *Config) loadAdminConfig(adminRepo *git.Repository) error {
 		return err
 	}
 
-	c.PrivateKeys = append(c.PrivateKeys, pk)
+	pks = append(pks, pk)
 
 	keyData, err = adminRepo.GetFile("ssh/id_rsa")
 	if err != nil {
@@ -92,7 +83,12 @@ func (c *Config) loadAdminConfig(adminRepo *git.Repository) error {
 		return err
 	}
 
-	c.PrivateKeys = append(c.PrivateKeys, pk)
+	pks = append(pks, pk)
+
+	// Now that all loading has succeeded, we can replace the values on the
+	// config struct.
+	c.adminConfig = adminConfig
+	c.pks = pks
 
 	return nil
 }
