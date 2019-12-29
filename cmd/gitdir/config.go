@@ -51,6 +51,8 @@ func NewEnvConfig() (Config, error) {
 		if logFormat != "console" && logFormat != "json" {
 			return c, errors.New("GITDIR_LOG_FORMAT: must be console or json")
 		}
+
+		c.LogFormat = logFormat
 	}
 
 	// Set up the logger - anything other than console defaults to json.

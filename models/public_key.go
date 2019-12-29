@@ -65,6 +65,10 @@ func (pk *PublicKey) RawMarshalAuthorizedKey() string {
 // MarshalAuthorizedKey converts a key to the authorized keys format,
 // including a comment.
 func (pk *PublicKey) MarshalAuthorizedKey() string {
+	if pk == nil {
+		return ""
+	}
+
 	key := pk.RawMarshalAuthorizedKey()
 
 	if pk.Comment != "" {

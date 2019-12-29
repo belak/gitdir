@@ -34,7 +34,7 @@ func ensureSampleConfigYaml(data []byte) (*yaml.Node, bool, error) {
 
 	// If we had to make any of the modifications, we need to specify the node
 	// was updated.
-	return rootNode, vals[0] || vals[1] || vals[2] || vals[3], nil
+	return rootNode, vals[0] || vals[1] || vals[2] || vals[3] || vals[4], nil
 }
 
 func ensureSampleInvites(targetNode *yaml.Node) bool {

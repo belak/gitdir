@@ -42,8 +42,6 @@ func (c *Config) RunHook(
 			newHash = args[2]
 		)
 
-		fmt.Println(args)
-
 		return c.runUpdateHook(repo, user, pk, oldHash, newHash, ref)
 	default:
 		return fmt.Errorf("hook %s is not implemented", hook)

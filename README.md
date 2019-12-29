@@ -52,7 +52,7 @@ This will create a binary called go-gitdir.
 ### Server Config
 
 There are a number of environment variables which can be used to configure your
-go-git-dir instance.
+gitdir instance.
 
 The following are required:
 
@@ -87,16 +87,9 @@ which change the behavior of the server.
 
 ## Usage
 
-Simply run the built binary with `GITDIR_BASE_DIR` set and start using it!
-
-On first run, go-git-dir will push a commit to the admin repo with a sample
-config as well as generated server ssh keys. These can be updated at any time
-(even at runtime) but if the server restarts and the keys cannot be loaded, they
-will be re-generated.
-
-Note that you will need to manually clone the admin repository (at
-`$GITDIR_BASE_DIR/admin/admin`) to add a user to `config.yml` and set them as an
-admin.
+1. Ensure `GITDIR_BASE_DIR` is set.
+2. If this is your first time running gitdir, make sure to run `gitdir init`.
+3. Run `gitdir serve`
 
 ## Sample Config
 

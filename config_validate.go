@@ -9,10 +9,10 @@ import (
 )
 
 // Validate will ensure the config is valid and return any errors.
-func (c *Config) Validate(user *User, pk *models.PublicKey) error {
+func (c *Config) Validate(currentUser *User, currentPk *models.PublicKey) error {
 	return newMultiError(
-		c.validateUser(user),
-		c.validatePublicKey(pk),
+		c.validateUser(currentUser),
+		c.validatePublicKey(currentPk),
 		c.validateAdmins(),
 		c.validateGroupLoop(),
 	)

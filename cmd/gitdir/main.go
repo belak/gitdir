@@ -1,28 +1,26 @@
 package main
 
 import (
-	"os"
-
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 )
 
 func main() {
-	c, err := NewEnvConfig()
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to load base config")
+	rootCmd := &cobra.Command{
+		Use:   "gitdir",
+		Short: "gitdir is a simple git SSH server.",
+		Args:  cobra.NoArgs,
 	}
 
-	if len(os.Args) > 1 {
-		if os.Args[1] != "hook" {
-			log.Fatal().Msg("sub-command not found")
-		}
+	// Add all the subcommands
+	rootCmd.AddCommand(
+		hookCmd(),
+		initCmd(),
+		doctorCmd(),
+		serveCmd(),
+	)
 
-		cmdHook(c)
-
-		return
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatal().Err(err).Msg("Failed to run command")
 	}
-
-	log.Info().Msg("starting go-gitdir")
-
-	cmdServe(c)
 }
