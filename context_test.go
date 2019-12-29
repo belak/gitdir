@@ -7,7 +7,6 @@ import (
 	"github.com/belak/go-gitdir/models"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/src-d/go-billy.v4/memfs"
 )
 
 func TestContextKey(t *testing.T) {
@@ -66,10 +65,9 @@ func TestCtxExtract(t *testing.T) {
 	ctx := context.Background()
 
 	logger, config, user := CtxExtract(ctx)
-	config.fs = nil
 
 	assert.Equal(t, &log.Logger, logger)
-	assert.Equal(t, NewConfig(nil), config)
+	assert.Equal(t, newConfig(), config)
 	assert.Equal(t, AnonymousUser, user)
 }
 
@@ -86,11 +84,10 @@ func TestCtxConfig(t *testing.T) {
 
 	// Check the default value
 	config := CtxConfig(ctx)
-	config.fs = nil
-	assert.Equal(t, NewConfig(nil), config)
+	assert.Equal(t, newConfig(), config)
 
 	// Check that when we set a value, this properly extracts it.
-	config = NewConfig(memfs.New())
+	config = newConfig()
 	ctx = context.WithValue(ctx, contextKeyConfig, config)
 	assert.Equal(t, config, CtxConfig(ctx))
 }

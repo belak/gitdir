@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/belak/go-gitdir/internal/git"
 	"github.com/belak/go-gitdir/models"
 )
 
@@ -16,7 +17,7 @@ func (c *Config) RunHook(
 	args []string,
 	stdin io.Reader,
 ) error {
-	user, err := c.LookupUserFromKey(*pk, c.Options.GitUser)
+	user, err := c.LookupUserByKey(*pk, c.Options.GitUser)
 	if err != nil {
 		return err
 	}
@@ -42,39 +43,41 @@ func (c *Config) RunHook(
 			newHash = args[2]
 		)
 
-		return c.runUpdateHook(repo, user, pk, oldHash, newHash, ref)
+		return runUpdateHook(repo, user, pk, git.NewHash(oldHash), git.NewHash(newHash), ref)
 	default:
 		return fmt.Errorf("hook %s is not implemented", hook)
 	}
 }
 
-func (c *Config) runUpdateHook(
+func runUpdateHook(
 	lookup *RepoLookup,
 	user *User,
 	pk *models.PublicKey,
-	oldHash string,
-	newHash string,
+	oldHash git.Hash,
+	newHash git.Hash,
 	ref string,
 ) error {
-	var err error
+	var (
+		c   *Config
+		err error
+	)
 
 	switch lookup.Type {
 	case RepoTypeAdmin:
-		err = c.SetHash(newHash)
+		c, err = LoadConfig("", newHash, nil, nil)
 	case RepoTypeOrgConfig:
-		err = c.SetOrgHash(lookup.PathParts[0], newHash)
+		c, err = LoadConfig("", git.ZeroHash, map[string]git.Hash{
+			lookup.PathParts[0]: newHash,
+		}, nil)
 	case RepoTypeUserConfig:
-		err = c.SetUserHash(lookup.PathParts[0], newHash)
+		c, err = LoadConfig("", git.ZeroHash, nil, map[string]git.Hash{
+			lookup.PathParts[0]: newHash,
+		})
 	default:
 		// Non-admin repos don't need this hook.
 		return nil
 	}
 
-	if err != nil {
-		return err
-	}
-
-	err = c.Load()
 	if err != nil {
 		return err
 	}

@@ -25,7 +25,7 @@ var AnonymousUser = &User{
 var ErrUserNotFound = errors.New("user not found")
 
 // LookupUserFromUsername looks up a user objects given their username.
-func (c *Config) LookupUserFromUsername(username string) (*User, error) {
+func (c *Config) LookupUserByUsername(username string) (*User, error) {
 	userConfig, ok := c.Users[username]
 	if !ok {
 		log.Warn().Msg("username does not match a user")
@@ -45,7 +45,7 @@ func (c *Config) LookupUserFromUsername(username string) (*User, error) {
 }
 
 // LookupUserFromKey looks up a user object given their PublicKey.
-func (c *Config) LookupUserFromKey(pk models.PublicKey, remoteUser string) (*User, error) {
+func (c *Config) LookupUserByKey(pk models.PublicKey, remoteUser string) (*User, error) {
 	username, ok := c.publicKeys[pk.RawMarshalAuthorizedKey()]
 	if !ok {
 		log.Warn().Msg("key does not exist")
@@ -77,7 +77,7 @@ func (c *Config) LookupUserFromKey(pk models.PublicKey, remoteUser string) (*Use
 }
 
 // LookupUserFromInvite looks up a user object given an invite code.
-func (c *Config) LookupUserFromInvite(invite string) (*User, error) {
+func (c *Config) LookupUserByInvite(invite string) (*User, error) {
 	username, ok := c.Invites[invite]
 	if !ok {
 		log.Warn().Msg("invite does not exist")

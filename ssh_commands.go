@@ -55,14 +55,14 @@ func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []stri
 	// Because we check ImplicitRepos earlier, if they have admin access, it's
 	// safe to ensure this repo exists.
 	if repo.Access >= AccessLevelAdmin {
-		_, err = git.EnsureRepo(serv.config.fs, repo.Path())
+		_, err = git.EnsureRepo(serv.baseConfig.BaseDir, repo.Path())
 		if err != nil {
 			return -1
 		}
 	}
 
-	returnCode := runCommand(log, serv.fs.Root(), s, []string{cmd[0], repo.Path()}, []string{
-		"GITDIR_BASE_DIR=" + serv.fs.Root(),
+	returnCode := runCommand(log, serv.baseConfig.BaseDir, s, []string{cmd[0], repo.Path()}, []string{
+		"GITDIR_BASE_DIR=" + serv.baseConfig.BaseDir,
 		"GITDIR_HOOK_REPO_PATH=" + repoName,
 		"GITDIR_HOOK_PUBLIC_KEY=" + pk.String(),
 		"GITDIR_LOG_FORMAT=console",

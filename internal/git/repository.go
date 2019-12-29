@@ -9,6 +9,7 @@ import (
 
 	billy "gopkg.in/src-d/go-billy.v4"
 	"gopkg.in/src-d/go-billy.v4/memfs"
+	"gopkg.in/src-d/go-billy.v4/osfs"
 	"gopkg.in/src-d/go-billy.v4/util"
 	git "gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
@@ -64,7 +65,9 @@ func Open(baseFS billy.Filesystem, path string) (*Repository, error) {
 
 // EnsureRepo will open a repository if it exists and try to create it if it
 // doesn't.
-func EnsureRepo(baseFS billy.Filesystem, path string) (*Repository, error) {
+func EnsureRepo(baseDir string, path string) (*Repository, error) {
+	baseFS := osfs.New(baseDir)
+
 	// This lets us sanitize the path and ensure it always has .git on the end.
 	path = strings.TrimSuffix(path, ".git") + ".git"
 
@@ -108,13 +111,10 @@ func EnsureRepo(baseFS billy.Filesystem, path string) (*Repository, error) {
 
 // Checkout will checkout the given hash to the worktreeFS. If an empty string
 // is given, we checkout master.
-func (r *Repository) Checkout(hash string) error {
+func (r *Repository) Checkout(hash Hash) error {
 	opts := &git.CheckoutOptions{
 		Force: true,
-	}
-
-	if hash != "" {
-		opts.Hash = plumbing.NewHash(hash)
+		Hash:  hash,
 	}
 
 	err := r.Worktree.Checkout(opts)

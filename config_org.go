@@ -5,7 +5,7 @@ import (
 	"github.com/belak/go-gitdir/models"
 )
 
-func (c *Config) loadOrgConfigs() error {
+func (c *Config) loadOrgConfigs(baseDir string, hashes map[string]git.Hash) error {
 	// Bail early if we don't need to load anything.
 	if !c.Options.OrgConfig {
 		return nil
@@ -14,7 +14,8 @@ func (c *Config) loadOrgConfigs() error {
 	var errors []error
 
 	for orgName := range c.Orgs {
-		errors = append(errors, c.loadOrgConfig(orgName))
+		hash := hashes[orgName]
+		errors = append(errors, c.loadOrgConfig(baseDir, orgName, hash))
 	}
 
 	// Because we want to display all the errors, we return this as a
@@ -22,13 +23,13 @@ func (c *Config) loadOrgConfigs() error {
 	return newMultiError(errors...)
 }
 
-func (c *Config) loadOrgConfig(orgName string) error {
-	orgRepo, err := git.EnsureRepo(c.fs, "admin/org-"+orgName)
+func (c *Config) loadOrgConfig(baseDir string, orgName string, orgHash git.Hash) error {
+	orgRepo, err := git.EnsureRepo(baseDir, "admin/org-"+orgName)
 	if err != nil {
 		return err
 	}
 
-	err = orgRepo.Checkout(c.orgRepos[orgName])
+	err = orgRepo.Checkout(orgHash)
 	if err != nil {
 		return err
 	}

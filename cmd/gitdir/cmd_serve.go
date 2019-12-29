@@ -1,11 +1,26 @@
 package main
 
 import (
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
 	"github.com/belak/go-gitdir"
 )
+
+func LoadServer() (*gitdir.Server, error) {
+	c, err := NewEnvConfig()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load base config")
+	}
+
+	serv, err := gitdir.NewServer(c)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load server config")
+	}
+
+	return serv, nil
+}
 
 func serveCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -13,19 +28,10 @@ func serveCmd() *cobra.Command {
 		Short: "Run the git SSH server",
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			c, err := NewEnvConfig()
+			serv, err := LoadServer()
 			if err != nil {
-				log.Fatal().Err(err).Msg("failed to load base config")
+				log.Fatal().Err(err).Msg("failed to load server")
 			}
-
-			log.Info().Msg("starting server")
-
-			serv, err := gitdir.NewServer(c.FS())
-			if err != nil {
-				log.Fatal().Err(err).Msg("failed to load SSH server")
-			}
-
-			serv.Addr = c.BindAddr
 
 			err = serv.ListenAndServe()
 			if err != nil {

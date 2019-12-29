@@ -5,11 +5,10 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/belak/go-gitdir"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"gopkg.in/src-d/go-billy.v4"
-	"gopkg.in/src-d/go-billy.v4/osfs"
 )
 
 // Config stores all the server-level settings. These cannot be changed at
@@ -22,11 +21,6 @@ type Config struct {
 	LogDebug  bool
 }
 
-// FS returns the billy.Filesystem for this base path.
-func (c Config) FS() billy.Filesystem {
-	return osfs.New(c.BasePath)
-}
-
 // DefaultConfig is used as the base config.
 var DefaultConfig = Config{
 	BindAddr:  ":2222",
@@ -35,21 +29,23 @@ var DefaultConfig = Config{
 }
 
 // NewEnvConfig returns a new Config based on environment variables.
-func NewEnvConfig() (Config, error) {
+func NewEnvConfig() (gitdir.ServerConfig, error) {
 	var err error
 
 	c := DefaultConfig
 
+	ret := gitdir.ServerConfig{}
+
 	if rawDebug, ok := os.LookupEnv("GITDIR_DEBUG"); ok {
 		c.LogDebug, err = strconv.ParseBool(rawDebug)
 		if err != nil {
-			return c, errors.Wrap(err, "GITDIR_DEBUG")
+			return ret, errors.Wrap(err, "GITDIR_DEBUG")
 		}
 	}
 
 	if logFormat, ok := os.LookupEnv("GITDIR_LOG_FORMAT"); ok {
 		if logFormat != "console" && logFormat != "json" {
-			return c, errors.New("GITDIR_LOG_FORMAT: must be console or json")
+			return ret, errors.New("GITDIR_LOG_FORMAT: must be console or json")
 		}
 
 		c.LogFormat = logFormat
@@ -71,21 +67,24 @@ func NewEnvConfig() (Config, error) {
 	var ok bool
 
 	if c.BasePath, ok = os.LookupEnv("GITDIR_BASE_DIR"); !ok {
-		return c, errors.New("GITDIR_BASE_DIR: not set")
+		return ret, errors.New("GITDIR_BASE_DIR: not set")
 	}
 
 	if c.BasePath, err = filepath.Abs(c.BasePath); err != nil {
-		return c, errors.Wrap(err, "GITDIR_BASE_DIR")
+		return ret, errors.Wrap(err, "GITDIR_BASE_DIR")
 	}
 
 	info, err := os.Stat(c.BasePath)
 	if err != nil {
-		return c, errors.Wrap(err, "GITDIR_BASE_DIR")
+		return ret, errors.Wrap(err, "GITDIR_BASE_DIR")
 	}
 
 	if !info.IsDir() {
-		return c, errors.New("GITDIR_BASE_DIR: not a directory")
+		return ret, errors.New("GITDIR_BASE_DIR: not a directory")
 	}
 
-	return c, nil
+	ret.Addr = c.BindAddr
+	ret.BaseDir = c.BasePath
+
+	return ret, nil
 }

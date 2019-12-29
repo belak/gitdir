@@ -6,7 +6,6 @@ import (
 	"github.com/belak/go-gitdir/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/src-d/go-billy.v4/memfs"
 )
 
 func mustParsePK(data string) models.PublicKey {
@@ -27,7 +26,7 @@ func newTestRepoConfig() *models.RepoConfig {
 }
 
 func newTestConfig() *Config { //nolint:funlen
-	c := NewConfig(memfs.New())
+	c := newConfig()
 
 	// Define some basic users
 	c.Users["an-admin"] = models.NewAdminConfigUser()
@@ -422,7 +421,7 @@ func TestCheckUserRepoAccess(t *testing.T) { //nolint:funlen
 	}
 
 	for _, test := range tests {
-		user, err := c.LookupUserFromUsername(test.Username)
+		user, err := c.LookupUserByUsername(test.Username)
 		require.Nil(t, err)
 
 		testCheckRepoAccess(t, c, user, test.Access)

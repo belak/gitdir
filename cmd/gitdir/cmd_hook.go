@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/belak/go-gitdir"
+	"github.com/belak/go-gitdir/internal/git"
 	"github.com/belak/go-gitdir/models"
 )
 
@@ -42,12 +43,12 @@ func hookCmd() *cobra.Command {
 				log.Fatal().Err(err).Msg("failed to parse public key")
 			}
 
-			config := gitdir.NewConfig(c.FS())
-
-			err = config.Load()
+			config, err := gitdir.LoadConfig(c.BaseDir, git.ZeroHash, nil, nil)
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to load gitdir")
 			}
+
+			// TODO: properly validate config
 
 			// Call the actual hook
 			err = config.RunHook(os.Args[2], path, pk, os.Args[3:], os.Stdin)

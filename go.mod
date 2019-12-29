@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/gliderlabs/ssh v0.2.2
+	github.com/libgit2/git2go v0.28.4
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pkg/errors v0.8.1
 	github.com/rs/zerolog v1.15.0

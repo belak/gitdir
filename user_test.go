@@ -28,7 +28,7 @@ func TestLookupUserFromUsername(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		user, err := c.LookupUserFromUsername(test.Username)
+		user, err := c.LookupUserByUsername(test.Username)
 
 		if test.Error != nil {
 			require.Equal(t, test.Error, err)
@@ -95,7 +95,7 @@ func TestLookupUserFromKey(t *testing.T) { //nolint:funlen
 		require.Nil(t, err)
 
 		// Try with the username hint
-		user, err := c.LookupUserFromKey(*pk, test.UserHint)
+		user, err := c.LookupUserByKey(*pk, test.UserHint)
 
 		if test.Error != nil {
 			require.Equal(t, test.Error, err)
@@ -105,7 +105,7 @@ func TestLookupUserFromKey(t *testing.T) { //nolint:funlen
 		}
 
 		// Try without the username hint
-		user, err = c.LookupUserFromKey(*pk, c.Options.GitUser)
+		user, err = c.LookupUserByKey(*pk, c.Options.GitUser)
 
 		if test.ErrorGitUser != nil {
 			require.Equal(t, test.ErrorGitUser, err)
@@ -147,7 +147,7 @@ func TestLookupUserFromInvite(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		user, err := c.LookupUserFromInvite(test.Invite)
+		user, err := c.LookupUserByInvite(test.Invite)
 
 		if test.Error != nil {
 			require.Equal(t, test.Error, err)

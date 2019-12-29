@@ -5,7 +5,7 @@ import (
 	"github.com/belak/go-gitdir/models"
 )
 
-func (c *Config) loadUserConfigs() error {
+func (c *Config) loadUserConfigs(baseDir string, hashes map[string]git.Hash) error {
 	// Bail early if we don't need to load anything.
 	if !c.Options.UserConfigKeys && !c.Options.UserConfigRepos {
 		return nil
@@ -14,7 +14,8 @@ func (c *Config) loadUserConfigs() error {
 	var errors []error
 
 	for username := range c.Users {
-		errors = append(errors, c.loadUserConfig(username))
+		hash := hashes[username]
+		errors = append(errors, c.loadUserConfig(baseDir, username, hash))
 	}
 
 	// Because we want to display all the errors, we return this as a
@@ -22,13 +23,13 @@ func (c *Config) loadUserConfigs() error {
 	return newMultiError(errors...)
 }
 
-func (c *Config) loadUserConfig(username string) error {
-	userRepo, err := git.EnsureRepo(c.fs, "admin/user-"+username)
+func (c *Config) loadUserConfig(baseDir string, username string, hash git.Hash) error {
+	userRepo, err := git.EnsureRepo(baseDir, "admin/user-"+username)
 	if err != nil {
 		return err
 	}
 
-	err = userRepo.Checkout(c.userRepos[username])
+	err = userRepo.Checkout(hash)
 	if err != nil {
 		return err
 	}

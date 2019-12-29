@@ -7,7 +7,6 @@ import (
 	"github.com/gliderlabs/ssh"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"gopkg.in/src-d/go-billy.v4/memfs"
 )
 
 type contextKey string
@@ -42,7 +41,7 @@ func CtxConfig(ctx context.Context) *Config {
 	}
 
 	// If it doesn't exist, return a new empty config for safety.
-	return NewConfig(memfs.New())
+	return newConfig()
 }
 
 // CtxSetUser puts the given User into the ssh.Context.

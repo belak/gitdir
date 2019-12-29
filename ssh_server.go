@@ -8,31 +8,34 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	gossh "golang.org/x/crypto/ssh"
-	"gopkg.in/src-d/go-billy.v4"
 
+	"github.com/belak/go-gitdir/internal/git"
 	"github.com/belak/go-gitdir/models"
 )
 
+type ServerConfig struct {
+	Addr    string
+	BaseDir string
+}
+
 // Server represents a gitdir server.
 type Server struct {
-	lock *sync.RWMutex
-
-	Addr string
+	baseConfig ServerConfig
+	lock       *sync.RWMutex
 
 	// Internal state
 	log    zerolog.Logger
-	fs     billy.Filesystem
 	config *Config
 	ssh    *ssh.Server
 }
 
 // NewServer configures a new gitdir server and attempts to load the config
 // from the admin repo.
-func NewServer(fs billy.Filesystem) (*Server, error) {
+func NewServer(config ServerConfig) (*Server, error) {
 	serv := &Server{
-		lock: &sync.RWMutex{},
-		log:  log.Logger,
-		fs:   fs,
+		baseConfig: config,
+		lock:       &sync.RWMutex{},
+		log:        log.Logger,
 	}
 
 	serv.ssh = &ssh.Server{
@@ -55,10 +58,7 @@ func (serv *Server) Reload() error {
 	defer serv.lock.Unlock()
 
 	// Create a new config object
-	config := NewConfig(serv.fs)
-
-	// Load the config from master
-	err := config.Load()
+	config, err := LoadConfig(serv.baseConfig.BaseDir, git.ZeroHash, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -86,10 +86,10 @@ func (serv *Server) Serve(l net.Listener) error {
 // ListenAndServe listens on the Addr set on the server struct for new SSH
 // connections.
 func (serv *Server) ListenAndServe() error {
-	serv.log.Info().Str("port", serv.Addr).Msg("Starting SSH server")
+	serv.log.Info().Str("port", serv.baseConfig.Addr).Msg("Starting SSH server")
 
 	// Because we're using ListenAndServe, we need to copy in the bind address.
-	serv.ssh.Addr = serv.Addr
+	serv.ssh.Addr = serv.baseConfig.Addr
 
 	return serv.ssh.ListenAndServe()
 }
@@ -130,7 +130,7 @@ func (serv *Server) handlePublicKey(ctx ssh.Context, incomingKey ssh.PublicKey) 
 		}
 	*/
 
-	user, err := config.LookupUserFromKey(pk, remoteUser)
+	user, err := config.LookupUserByKey(pk, remoteUser)
 	if err != nil {
 		slog.Warn().Err(err).Msg("User not found")
 		return false
