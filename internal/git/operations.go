@@ -3,8 +3,8 @@ package git
 import (
 	"io/ioutil"
 
-	"gopkg.in/src-d/go-git.v4"
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 // GetFile is a convenience method to get the contents of a file in the repo.
