@@ -128,6 +128,7 @@ func runCommand( //nolint:funlen
 
 	go func() {
 		defer stdin.Close()
+
 		if _, stdinErr := io.Copy(stdin, session); stdinErr != nil {
 			log.Error().Err(err).Msg("Failed to write session to stdin")
 		}
@@ -135,6 +136,7 @@ func runCommand( //nolint:funlen
 
 	go func() {
 		defer wg.Done()
+
 		if _, stdoutErr := io.Copy(session, stdout); stdoutErr != nil {
 			log.Error().Err(err).Msg("Failed to write stdout to session")
 		}
@@ -142,6 +144,7 @@ func runCommand( //nolint:funlen
 
 	go func() {
 		defer wg.Done()
+
 		if _, stderrErr := io.Copy(session.Stderr(), stderr); stderrErr != nil {
 			log.Error().Err(err).Msg("Failed to write stderr to session")
 		}
