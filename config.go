@@ -1,7 +1,7 @@
 package gitdir
 
 import (
-	"gopkg.in/src-d/go-billy.v4"
+	billy "github.com/go-git/go-billy/v5"
 
 	"github.com/belak/go-gitdir/internal/git"
 	"github.com/belak/go-gitdir/models"

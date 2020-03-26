@@ -5,10 +5,10 @@ import (
 	"sync"
 
 	"github.com/gliderlabs/ssh"
+	billy "github.com/go-git/go-billy/v5"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	gossh "golang.org/x/crypto/ssh"
-	"gopkg.in/src-d/go-billy.v4"
 
 	"github.com/belak/go-gitdir/models"
 )

@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/belak/go-gitdir/models"
+	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/src-d/go-billy.v4/memfs"
 )
 
 func TestContextKey(t *testing.T) {

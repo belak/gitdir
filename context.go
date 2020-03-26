@@ -5,9 +5,9 @@ import (
 
 	"github.com/belak/go-gitdir/models"
 	"github.com/gliderlabs/ssh"
+	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"gopkg.in/src-d/go-billy.v4/memfs"
 )
 
 type contextKey string

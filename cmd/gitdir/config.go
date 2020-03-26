@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 	"strconv"
 
+	billy "github.com/go-git/go-billy/v5"
+	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"gopkg.in/src-d/go-billy.v4"
-	"gopkg.in/src-d/go-billy.v4/osfs"
 )
 
 // Config stores all the server-level settings. These cannot be changed at

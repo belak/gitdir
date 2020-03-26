@@ -4,9 +4,9 @@ import (
 	"testing"
 
 	"github.com/belak/go-gitdir/models"
+	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/src-d/go-billy.v4/memfs"
 )
 
 func mustParsePK(data string) models.PublicKey {
