@@ -2,6 +2,7 @@ package git
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -121,7 +122,7 @@ func (r *Repository) Checkout(hash string) error {
 
 	// It's fine to ignore ErrReferenceNotFound because that means this is a
 	// repo without any commits which doesn't matter for our use cases.
-	if err != nil && err != plumbing.ErrReferenceNotFound {
+	if err != nil && !errors.Is(err, plumbing.ErrReferenceNotFound) {
 		return err
 	}
 
@@ -135,7 +136,7 @@ func ensureHooks(fs billy.Filesystem) error {
 	}
 
 	for _, hook := range hooks {
-		err := fs.MkdirAll("hooks/"+hook.Name+".d", 0777)
+		err := fs.MkdirAll("hooks/"+hook.Name+".d", os.ModePerm)
 		if err != nil {
 			return err
 		}
@@ -173,7 +174,7 @@ func writeIfDifferent(fs billy.Basic, path string, data []byte) error {
 
 	// Quick check to avoid unneeded writes
 	if !bytes.Equal(oldData, data) {
-		return util.WriteFile(fs, path, data, 0777)
+		return util.WriteFile(fs, path, data, os.ModePerm)
 	}
 
 	return nil

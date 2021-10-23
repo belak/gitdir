@@ -13,7 +13,7 @@ type OrgConfig struct {
 	Repos map[string]*RepoConfig `yaml:"repos"`
 }
 
-// NewOrgConfig returns a new, empty OrgConfig
+// NewOrgConfig returns a new, empty OrgConfig.
 func NewOrgConfig() *OrgConfig {
 	return &OrgConfig{
 		Repos: make(map[string]*RepoConfig),

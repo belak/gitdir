@@ -3,9 +3,10 @@ package gitdir
 import (
 	"testing"
 
-	"github.com/belak/go-gitdir/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/belak/go-gitdir/models"
 )
 
 func TestLookupUserFromUsername(t *testing.T) {
@@ -13,7 +14,7 @@ func TestLookupUserFromUsername(t *testing.T) {
 
 	c := newTestConfig()
 
-	var tests = []struct {
+	var tests = []struct { //nolint:gofumpt
 		Username string
 		Error    error
 	}{
@@ -44,7 +45,7 @@ func TestLookupUserFromKey(t *testing.T) { //nolint:funlen
 
 	c := newTestConfig()
 
-	var tests = []struct {
+	var tests = []struct { //nolint:gofumpt
 		UserHint     string
 		Username     string
 		PublicKey    string
@@ -117,9 +118,11 @@ func TestLookupUserFromKey(t *testing.T) { //nolint:funlen
 }
 
 func TestLookupUserFromInvite(t *testing.T) {
+	t.Parallel()
+
 	c := newTestConfig()
 
-	var tests = []struct {
+	var tests = []struct { //nolint:gofumpt
 		Username string
 		Invite   string
 		Error    error

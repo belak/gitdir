@@ -19,7 +19,7 @@ func NewMappingNode() *Node {
 // NewSequenceNode returns a new node pointing to a yaml list.
 func NewSequenceNode() *Node {
 	return &Node{
-		&yaml.Node{Kind: yaml.MappingNode},
+		&yaml.Node{Kind: yaml.SequenceNode},
 	}
 }
 
@@ -64,10 +64,9 @@ func (n *Node) KeyIndex(key string) int {
 
 // ValueNode returns the given value node for a key, or nil if not found.
 func (n *Node) ValueNode(key string) *Node {
-	idx := n.KeyIndex(key)
-	if idx == -1 {
-		return nil
+	if idx := n.KeyIndex(key); idx != -1 {
+		return &Node{n.Content[idx+1]}
 	}
 
-	return &Node{n.Content[idx+1]}
+	return nil
 }

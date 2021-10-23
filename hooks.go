@@ -1,3 +1,4 @@
+//nolint:forbidigo
 package gitdir
 
 import (
@@ -8,7 +9,7 @@ import (
 	"github.com/belak/go-gitdir/models"
 )
 
-// RunHook will run the given hook
+// RunHook will run the given hook.
 func (c *Config) RunHook(
 	hook string,
 	repoPath string,

@@ -1,6 +1,8 @@
 package gitdir
 
 import (
+	"fmt"
+
 	billy "github.com/go-git/go-billy/v5"
 
 	"github.com/belak/go-gitdir/internal/git"
@@ -28,18 +30,8 @@ type Config struct {
 	userRepos     map[string]string
 }
 
-// NewConfig returns an empty config, attached to the given fs. In general, this
-// is designed to be called in order:
-//
-// c := NewConfig(fs)
-// err := c.Load()
-// if err != nil {
-//	return err
-// }
-// err = c.Validate()
-// if err != nil {
-//	return err
-// }
+// NewConfig returns an empty config, attached to the given fs. In general, Load
+// should be called after creating a new config at a bare minimum.
 func NewConfig(fs billy.Filesystem) *Config {
 	return &Config{
 		Invites: make(map[string]string),
@@ -58,28 +50,33 @@ func NewConfig(fs billy.Filesystem) *Config {
 	}
 }
 
-// Load will load the config from the given fs, including any hash overrides.
+// Load will load the config from the given fs.
 func (c *Config) Load() error {
-	adminRepo, err := git.EnsureRepo(c.fs, "admin/admin")
+	adminRepo, err := c.openAdminRepo()
 	if err != nil {
 		return err
+	}
+
+	return c.loadConfig(adminRepo)
+}
+
+func (c *Config) openAdminRepo() (*git.Repository, error) {
+	adminRepo, err := git.EnsureRepo(c.fs, "admin/admin")
+	if err != nil {
+		return nil, err
 	}
 
 	err = adminRepo.Checkout(c.adminRepoHash)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// Ensure config
-	//
-	// TODO: this should not be here because it is also used in hooks.
-	err = c.ensureAdminConfig(adminRepo)
-	if err != nil {
-		return err
-	}
+	return adminRepo, nil
+}
 
+func (c *Config) loadConfig(adminRepo *git.Repository) error {
 	// Load config
-	err = c.loadAdminConfig(adminRepo)
+	err := c.loadAdminConfig(adminRepo)
 	if err != nil {
 		return err
 	}
@@ -93,8 +90,35 @@ func (c *Config) Load() error {
 		return err
 	}
 
-	// We actually only commit at the very end, after everything has been
-	// loaded. This ensures we have a valid config.
+	c.flatten()
+
+	return nil
+}
+
+func (c *Config) EnsureConfig() error {
+	adminRepo, err := c.openAdminRepo()
+	if err != nil {
+		return err
+	}
+
+	return c.ensureConfig(adminRepo)
+}
+
+func (c *Config) ensureConfig(adminRepo *git.Repository) error {
+	// Ensure config
+	err := c.ensureAdminConfig(adminRepo)
+	if err != nil {
+		return err
+	}
+
+	// Load config
+	err = c.loadConfig(adminRepo)
+	if err != nil {
+		return err
+	}
+
+	// We only commit at the very end, after everything has been loaded. This
+	// ensures we have a valid config.
 	status, err := adminRepo.Worktree.Status()
 	if err != nil {
 		return err
@@ -107,7 +131,48 @@ func (c *Config) Load() error {
 		}
 	}
 
-	c.flatten()
+	return nil
+}
+
+// EnsureUser will load the current admin config and ensure the given user
+// exists.
+func (c *Config) EnsureAdminUser(username string, pubKey *models.PublicKey) error {
+	adminRepo, err := c.openAdminRepo()
+	if err != nil {
+		return err
+	}
+
+	// Ensure the base config before we try and add a user.
+	err = c.ensureAdminConfig(adminRepo)
+	if err != nil {
+		return err
+	}
+
+	// Ensure User
+	err = c.ensureAdminUser(adminRepo, username, pubKey)
+	if err != nil {
+		return err
+	}
+
+	// Load config
+	err = c.loadConfig(adminRepo)
+	if err != nil {
+		return err
+	}
+
+	// We only commit at the very end, after everything has been loaded. This
+	// ensures we have a valid config.
+	status, err := adminRepo.Worktree.Status()
+	if err != nil {
+		return err
+	}
+
+	if !status.IsClean() {
+		err = adminRepo.Commit(fmt.Sprintf("Added %s to config as admin", username), nil)
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

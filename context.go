@@ -3,11 +3,12 @@ package gitdir
 import (
 	"context"
 
-	"github.com/belak/go-gitdir/models"
 	"github.com/gliderlabs/ssh"
 	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	"github.com/belak/go-gitdir/models"
 )
 
 type contextKey string

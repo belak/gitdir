@@ -30,7 +30,7 @@ func ParsePublicKey(data []byte) (*PublicKey, error) {
 	return &pk, nil
 }
 
-// UnmarshalYAML implements yaml.Unmarshaler.UnmarshalYAML
+// UnmarshalYAML implements yaml.Unmarshaler.UnmarshalYAML.
 func (pk *PublicKey) UnmarshalYAML(unmarshal func(v interface{}) error) error {
 	var rawData string
 
@@ -47,7 +47,7 @@ func (pk *PublicKey) UnmarshalYAML(unmarshal func(v interface{}) error) error {
 	return nil
 }
 
-// String implements fmt.Stringer
+// String implements fmt.Stringer.
 func (pk *PublicKey) String() string {
 	return pk.MarshalAuthorizedKey()
 }

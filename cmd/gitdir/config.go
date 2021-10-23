@@ -1,25 +1,30 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 
 	billy "github.com/go-git/go-billy/v5"
 	"github.com/go-git/go-billy/v5/osfs"
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	"github.com/belak/go-gitdir/models"
 )
 
 // Config stores all the server-level settings. These cannot be changed at
 // runtime. They are only used by the binary and are passed to the proper
 // places.
 type Config struct {
-	BindAddr  string
-	BasePath  string
-	LogFormat string
-	LogDebug  bool
+	BindAddr       string
+	BasePath       string
+	LogFormat      string
+	LogDebug       bool
+	AdminUser      string
+	AdminPublicKey *models.PublicKey
 }
 
 // FS returns the billy.Filesystem for this base path.
@@ -29,13 +34,16 @@ func (c Config) FS() billy.Filesystem {
 
 // DefaultConfig is used as the base config.
 var DefaultConfig = Config{
-	BindAddr:  ":2222",
-	BasePath:  "./tmp",
-	LogFormat: "json",
+	BindAddr:       ":2222",
+	BasePath:       "./tmp",
+	LogFormat:      "json",
+	LogDebug:       false,
+	AdminUser:      "",
+	AdminPublicKey: nil,
 }
 
 // NewEnvConfig returns a new Config based on environment variables.
-func NewEnvConfig() (Config, error) {
+func NewEnvConfig() (Config, error) { //nolint:cyclop,funlen
 	var err error
 
 	c := DefaultConfig
@@ -43,7 +51,7 @@ func NewEnvConfig() (Config, error) {
 	if rawDebug, ok := os.LookupEnv("GITDIR_DEBUG"); ok {
 		c.LogDebug, err = strconv.ParseBool(rawDebug)
 		if err != nil {
-			return c, errors.Wrap(err, "GITDIR_DEBUG")
+			return c, fmt.Errorf("GITDIR_DEBUG: %w", err)
 		}
 	}
 
@@ -69,20 +77,34 @@ func NewEnvConfig() (Config, error) {
 	var ok bool
 
 	if c.BasePath, ok = os.LookupEnv("GITDIR_BASE_DIR"); !ok {
-		return c, errors.New("GITDIR_BASE_DIR: not set")
+		return c, fmt.Errorf("GITDIR_BASE_DIR: not set")
 	}
 
 	if c.BasePath, err = filepath.Abs(c.BasePath); err != nil {
-		return c, errors.Wrap(err, "GITDIR_BASE_DIR")
+		return c, fmt.Errorf("GITDIR_BASE_DIR: %w", err)
 	}
 
 	info, err := os.Stat(c.BasePath)
 	if err != nil {
-		return c, errors.Wrap(err, "GITDIR_BASE_DIR")
+		return c, fmt.Errorf("GITDIR_BASE_DIR: %w", err)
 	}
 
 	if !info.IsDir() {
 		return c, errors.New("GITDIR_BASE_DIR: not a directory")
+	}
+
+	// AdminUser and AdminPublicKey are allowed to not be set.
+	if adminUser, ok := os.LookupEnv("GITDIR_ADMIN_USER"); ok {
+		c.AdminUser = adminUser
+	}
+
+	if adminPublicKeyRaw, ok := os.LookupEnv("GITDIR_ADMIN_PUBLIC_KEY"); ok {
+		adminPublicKey, err := models.ParsePublicKey([]byte(adminPublicKeyRaw))
+		if err != nil {
+			return c, fmt.Errorf("GITDIR_ADMIN_PUBLIC_KEY: %w", err)
+		}
+
+		c.AdminPublicKey = adminPublicKey
 	}
 
 	return c, nil

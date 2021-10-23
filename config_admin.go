@@ -17,6 +17,12 @@ func (c *Config) ensureAdminConfigYaml(repo *git.Repository) error {
 	return repo.UpdateFile("config.yml", ensureSampleConfig)
 }
 
+func (c *Config) ensureAdminUser(repo *git.Repository, user string, pubKey *models.PublicKey) error {
+	return repo.UpdateFile("config.yml", func(data []byte) ([]byte, error) {
+		return ensureAdminUser(data, user, pubKey.MarshalAuthorizedKey())
+	})
+}
+
 func (c *Config) ensureAdminEd25519Key(repo *git.Repository) error {
 	return repo.UpdateFile("ssh/id_ed25519", func(data []byte) ([]byte, error) {
 		if data != nil {

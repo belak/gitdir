@@ -45,7 +45,7 @@ func (c *Config) validateAdmins() error {
 }
 
 func (c *Config) validateGroupLoop() error {
-	var errors []error
+	errors := make([]error, 0, len(c.Groups))
 
 	// Essentially this is "do a tree traversal on the groups"
 	for groupName := range c.Groups {

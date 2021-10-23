@@ -72,7 +72,7 @@ func TestGetExitStatusFromError(t *testing.T) {
 	cmd := exec.Command("sh", "-c", "exit 10")
 	cmdErr := cmd.Run()
 
-	var tests = []struct {
+	var tests = []struct { //nolint:gofumpt
 		Input    error
 		Expected int
 	}{
@@ -99,7 +99,7 @@ func TestGetExitStatusFromError(t *testing.T) {
 func TestSanitize(t *testing.T) {
 	t.Parallel()
 
-	var tests = []struct {
+	var tests = []struct { //nolint:gofumpt
 		Input    string
 		Expected string
 	}{

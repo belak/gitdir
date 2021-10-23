@@ -3,10 +3,11 @@ package gitdir
 import (
 	"testing"
 
-	"github.com/belak/go-gitdir/models"
 	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/belak/go-gitdir/models"
 )
 
 func mustParsePK(data string) models.PublicKey {
@@ -117,7 +118,7 @@ func TestRepoLookup(t *testing.T) { //nolint:funlen
 
 	c := newTestConfig()
 
-	var tests = []struct {
+	var tests = []struct { //nolint:gofumpt
 		Lookup string
 		Type   RepoType
 		Path   string
@@ -275,6 +276,8 @@ type allImplicitAccessLevels struct {
 }
 
 func lookupAndCheck(t *testing.T, c *Config, u *User, path string, access AccessLevel) {
+	t.Helper()
+
 	repo, err := c.LookupRepoAccess(u, path)
 	require.Nil(t, err)
 	require.NotNil(t, repo)
@@ -282,6 +285,8 @@ func lookupAndCheck(t *testing.T, c *Config, u *User, path string, access Access
 }
 
 func testCheckRepoAccess(t *testing.T, c *Config, u *User, access allRepoAccessLevels) {
+	t.Helper()
+
 	lookupAndCheck(t, c, u, "admin", access.Admin)
 	lookupAndCheck(t, c, u, "@an-org", access.OrgConfig)
 	lookupAndCheck(t, c, u, "@an-org/test-repo", access.OrgRepo)
@@ -291,6 +296,8 @@ func testCheckRepoAccess(t *testing.T, c *Config, u *User, access allRepoAccessL
 }
 
 func testImplicitRepoAccess(t *testing.T, c *Config, u *User, access allImplicitAccessLevels) {
+	t.Helper()
+
 	prevImplicit := c.Options.ImplicitRepos
 
 	defer func() {
@@ -337,7 +344,7 @@ func TestCheckUserRepoAccess(t *testing.T) { //nolint:funlen
 	// | Direct Reader |           |       |       |
 	// |---------------+-----------+-------+-------|
 
-	var tests = []struct {
+	var tests = []struct { //nolint:gofumpt
 		Username       string
 		Access         allRepoAccessLevels
 		ImplicitAccess allImplicitAccessLevels

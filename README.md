@@ -65,6 +65,10 @@ The following are optional:
   defaults to `:2222`.
 - `GITDIR_LOG_READABLE` - A true value if the log should be human readable
 - `GITDIR_LOG_DEBUG` - A true value if debug logging should be enabled
+- `GITDIR_ADMIN_USER` - The name of an admin user which the server will ensure
+  exists on startup.
+- `GITHUB_ADMIN_PUBLIC_KEY` - The contents of a public key which will be added
+  to the admin user on startup.
 
 ### Runtime Config
 
@@ -89,14 +93,17 @@ which change the behavior of the server.
 
 Simply run the built binary with `GITDIR_BASE_DIR` set and start using it!
 
-On first run, go-git-dir will push a commit to the admin repo with a sample
+On first run, gitdir will push a commit to the admin repo with a sample
 config as well as generated server ssh keys. These can be updated at any time
 (even at runtime) but if the server restarts and the keys cannot be loaded, they
 will be re-generated.
 
-Note that you will need to manually clone the admin repository (at
-`$GITDIR_BASE_DIR/admin/admin`) to add a user to `config.yml` and set them as an
-admin.
+If you set `GITDIR_ADMIN_USER` and `GITHUB_ADMIN_PUBLIC_KEY` an admin user will
+automatically be added to the config.
+
+If you do not set those environment variables, you will need to manually clone
+the admin repository (at `$GITDIR_BASE_DIR/admin/admin`) to add a user to
+`config.yml` and set them as an admin.
 
 ## Sample Config
 

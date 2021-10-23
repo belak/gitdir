@@ -3,8 +3,9 @@ package gitdir
 import (
 	"errors"
 
-	"github.com/belak/go-gitdir/models"
 	"github.com/rs/zerolog/log"
+
+	"github.com/belak/go-gitdir/models"
 )
 
 // User is the internal representation of a user. This data is copied from the
@@ -19,9 +20,11 @@ type User struct {
 var AnonymousUser = &User{
 	Username:    "<anonymous>",
 	IsAnonymous: true,
+	IsAdmin:     false,
 }
 
-// ErrUserNotFound is returned from LookupUser commands when
+// ErrUserNotFound is returned from LookupUser commands when the user is not
+// found.
 var ErrUserNotFound = errors.New("user not found")
 
 // LookupUserFromUsername looks up a user objects given their username.

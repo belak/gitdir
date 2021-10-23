@@ -3,10 +3,28 @@ linters:
   disable:
     - godox
     - gomnd
-    - prealloc
     - unparam
     - gochecknoglobals
+    - goerr113
+    - exhaustivestruct
+    - nestif
+    - wrapcheck
+    - nlreturn
+    - testpackage
+    - exhaustive
+
+    # Deprecated linters
+    - interfacer
+    - maligned
+    - scopelint
+    - golint
 
 linters-settings:
   govet:
     check-shadowing: true
+  gci:
+    local-prefixes: github.com/belak/go-gitdir
+  tagliatelle:
+    case:
+      rules:
+        yaml: snake

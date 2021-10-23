@@ -11,7 +11,7 @@ func (c *Config) loadOrgConfigs() error {
 		return nil
 	}
 
-	var errors []error
+	errors := make([]error, 0, len(c.Orgs))
 
 	for orgName := range c.Orgs {
 		errors = append(errors, c.loadOrgConfig(orgName))

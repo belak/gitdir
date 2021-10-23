@@ -2,6 +2,7 @@ package gitdir
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -71,8 +72,8 @@ func getExitStatusFromError(err error) int {
 		return 0
 	}
 
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
 		return 1
 	}
 
@@ -84,7 +85,7 @@ func sanitize(in string) string {
 	return strings.ToLower(in)
 }
 
-// TODO: see if this can be cleaned up
+// TODO: see if this can be cleaned up.
 func runCommand( //nolint:funlen
 	log *zerolog.Logger,
 	cwd string,

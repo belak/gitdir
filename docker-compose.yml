@@ -1,0 +1,26 @@
+# Build and deploy steps:
+#
+# 01. Create a .env file and set `GITDIR_ADMIN_USER` to the name you want to use
+#     for the admin user and `GITDIR_ADMIN_PUBLIC_KEY` to the contents of a
+#     public key. You can also set these environment variables using another
+#     method.
+# 02. After `gitdir` starts up, you may try `git clone
+#     ssh://<your_username>@<gitdir_host>:2222/admin.git` to clone the admin
+#     repository of gitdir
+# 03. To learn how to create repositories and more, see the home page of
+#     `gitdir`
+
+version: "3.7"
+
+volumes:
+  gitdir:
+
+services:
+  gitdir:
+    container_name: gitdir
+    build: .
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:2222:2222/tcp"
+    volumes:
+      - gitdir:/var/lib/gitdir
