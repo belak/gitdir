@@ -21,7 +21,7 @@ const (
 	AccessLevelAdmin
 )
 
-// String implements Stringer
+// String implements Stringer.
 func (a AccessLevel) String() string {
 	switch a {
 	case AccessLevelNone:
@@ -83,8 +83,8 @@ func (c *Config) checkListsForUser(username string, userLists ...[]string) bool 
 	return false
 }
 
-// TODO: clean up nolint here
-func (c *Config) checkUserRepoAccess(user *User, repo *RepoLookup) AccessLevel { //nolint:funlen
+// TODO: clean up nolint here.
+func (c *Config) checkUserRepoAccess(user *User, repo *RepoLookup) AccessLevel { //nolint:cyclop,funlen
 	// Admins always have access to everything.
 	if user.IsAdmin {
 		return AccessLevelAdmin

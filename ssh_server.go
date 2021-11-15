@@ -41,12 +41,39 @@ func NewServer(fs billy.Filesystem) (*Server, error) {
 	}
 
 	// This will set serv.settings
-	err := serv.Reload()
-	if err != nil {
+	if err := serv.Reload(); err != nil {
 		return nil, err
 	}
 
 	return serv, nil
+}
+
+func (serv *Server) EnsureAdminUser(username string, pubKey *models.PublicKey) error {
+	serv.lock.Lock()
+	defer serv.lock.Unlock()
+
+	// Create a new config object
+	config := NewConfig(serv.fs)
+
+	// Ensure the sample config
+	err := config.EnsureConfig()
+	if err != nil {
+		return err
+	}
+
+	// Ensure the user exists
+	err = config.EnsureAdminUser(username, pubKey)
+	if err != nil {
+		return err
+	}
+
+	// Load the config from master
+	err = config.Load()
+	if err != nil {
+		return err
+	}
+
+	return serv.reloadUnlocked(config)
 }
 
 // Reload reloads the server config in a thread-safe way.
@@ -57,12 +84,22 @@ func (serv *Server) Reload() error {
 	// Create a new config object
 	config := NewConfig(serv.fs)
 
-	// Load the config from master
-	err := config.Load()
+	// Ensure the sample config
+	err := config.EnsureConfig()
 	if err != nil {
 		return err
 	}
 
+	// Load the config from master
+	err = config.Load()
+	if err != nil {
+		return err
+	}
+
+	return serv.reloadUnlocked(config)
+}
+
+func (serv *Server) reloadUnlocked(config *Config) error {
 	serv.config = config
 
 	// Load all ssh keys into the actual ssh server.

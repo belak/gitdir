@@ -51,7 +51,7 @@ func GenerateEd25519PrivateKey() (PrivateKey, error) {
 	return &ed25519PrivateKey{pk}, err
 }
 
-// MarshalPrivateKey implements PrivateKey.MarshalPrivateKey
+// MarshalPrivateKey implements PrivateKey.MarshalPrivateKey.
 func (pk *ed25519PrivateKey) MarshalPrivateKey() ([]byte, error) {
 	// Get ASN.1 DER format
 	privDER, err := x509.MarshalPKCS8PrivateKey(pk.PrivateKey)
@@ -108,7 +108,7 @@ func GenerateRSAPrivateKey() (PrivateKey, error) {
 	return &rsaPrivateKey{privateKey}, nil
 }
 
-// MarshalPrivateKey implements PrivateKey.MarshalPrivateKey
+// MarshalPrivateKey implements PrivateKey.MarshalPrivateKey.
 func (pk *rsaPrivateKey) MarshalPrivateKey() ([]byte, error) {
 	// Get ASN.1 DER format
 	privDER := x509.MarshalPKCS1PrivateKey(pk.PrivateKey)

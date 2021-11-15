@@ -3,3 +3,6 @@
 **/node_modules
 Dockerfile
 docker-compose.yaml
+.env
+gitdir
+tmp

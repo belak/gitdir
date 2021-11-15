@@ -6,7 +6,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 )
 
-// RemoveKey will remove a given key and value from a MappingNode
+// RemoveKey will remove a given key and value from a MappingNode.
 func (n *Node) RemoveKey(key string) bool {
 	idx := n.KeyIndex(key)
 	if idx == -1 {
@@ -63,6 +63,29 @@ func (n *Node) EnsureKey(key string, newNode *Node, opts *EnsureOptions) (*Node,
 	}
 
 	return valNode, false
+}
+
+// AppendNode will append a value to a SequenceNode.
+func (n *Node) AppendNode(newNode *Node) {
+	n.Content = append(n.Content, newNode.Node)
+}
+
+// AppendNode will append a scalar to a SequenceNode if it does not already
+// exist.
+func (n *Node) AppendUniqueScalar(newNode *Node) bool {
+	for _, iterNode := range n.Content {
+		if iterNode.Kind != yaml.ScalarNode {
+			continue
+		}
+
+		if iterNode.Value == newNode.Value {
+			return false
+		}
+	}
+
+	n.AppendNode(newNode)
+
+	return true
 }
 
 // EnsureDocument takes data from a yaml file and ensures a basic document

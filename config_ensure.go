@@ -216,3 +216,34 @@ func ensureSampleOptions(targetNode *yaml.Node) bool {
 
 	return modified
 }
+
+func ensureAdminUser(data []byte, username, pubKey string) ([]byte, error) {
+	rootNode, modified, err := ensureAdminUserYaml(data, username, pubKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if !modified {
+		return data, nil
+	}
+
+	return rootNode.Encode()
+}
+
+func ensureAdminUserYaml(data []byte, username, pubKey string) (*yaml.Node, bool, error) {
+	rootNode, targetNode, err := yaml.EnsureDocument(data)
+	if err != nil {
+		return nil, false, err
+	}
+
+	usersNode, _ := targetNode.EnsureKey("users", yaml.NewMappingNode(), nil)
+	userNode, _ := usersNode.EnsureKey(username, yaml.NewMappingNode(), nil)
+	keysNode, _ := userNode.EnsureKey("keys", yaml.NewSequenceNode(), nil)
+	modified := keysNode.AppendUniqueScalar(yaml.NewScalarNode(pubKey, ""))
+
+	// Ensure this user is an admin and isn't disabled
+	_, adminModified := userNode.EnsureKey("is_admin", yaml.NewScalarNode("true", yaml.ScalarTagBool), nil)
+	disabledModified := userNode.RemoveKey("disabled")
+
+	return rootNode, modified || disabledModified || adminModified, nil
+}

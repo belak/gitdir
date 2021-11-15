@@ -11,7 +11,7 @@ func (c *Config) loadUserConfigs() error {
 		return nil
 	}
 
-	var errors []error
+	errors := make([]error, 0, len(c.Users))
 
 	for username := range c.Users {
 		errors = append(errors, c.loadUserConfig(username))

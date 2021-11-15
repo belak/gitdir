@@ -21,7 +21,7 @@ const (
 	RepoTypeTopLevel
 )
 
-// String implements Stringer
+// String implements Stringer.
 func (r RepoType) String() string {
 	switch r {
 	case RepoTypeAdmin:
@@ -207,8 +207,7 @@ func (c *Config) lookupTopLevelRepo(path string) (*RepoLookup, error) {
 		return ret, nil
 	}
 
-	_, ok := c.Repos[repoPath[0]]
-	if ok {
+	if _, ok := c.Repos[repoPath[0]]; ok {
 		return ret, nil
 	}
 
