@@ -1,7 +1,5 @@
 # Stage 1: Build the application
-FROM golang:1.17-bullseye as builder
-
-# Get yq to use as a helper script in the debian image.
+FROM golang:1.19-bullseye as builder
 
 RUN mkdir /build && mkdir /usr/local/src/gitdir
 WORKDIR /usr/local/src/gitdir
@@ -20,7 +18,7 @@ ENV GITDIR_BASE_DIR=/var/lib/gitdir \
 
 VOLUME /var/lib/gitdir
 
-# Install git so git-upload-pack and git-receive-pack work.
+# Install git so git-upload-pack and git-receive-pack are available.
 RUN apt-get update && apt-get install -y git \
   && rm -rf /var/lib/apt/lists/*
 

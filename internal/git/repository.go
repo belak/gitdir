@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"strings"
 
@@ -169,7 +169,7 @@ func writeIfDifferent(fs billy.Basic, path string, data []byte) error {
 	f, err := fs.Open(path)
 	if err == nil {
 		defer f.Close()
-		oldData, _ = ioutil.ReadAll(f)
+		oldData, _ = io.ReadAll(f)
 	}
 
 	// Quick check to avoid unneeded writes

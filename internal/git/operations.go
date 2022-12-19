@@ -1,7 +1,7 @@
 package git
 
 import (
-	"io/ioutil"
+	"io"
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -14,7 +14,7 @@ func (r *Repository) GetFile(filename string) ([]byte, error) {
 		return nil, err
 	}
 
-	return ioutil.ReadAll(f)
+	return io.ReadAll(f)
 }
 
 // FileExists returns true if the given path exists and is a regular file in the

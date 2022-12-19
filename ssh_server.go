@@ -1,6 +1,7 @@
 package gitdir
 
 import (
+	"context"
 	"net"
 	"sync"
 
@@ -183,7 +184,7 @@ func (serv *Server) handlePublicKey(ctx ssh.Context, incomingKey ssh.PublicKey) 
 }
 
 func (serv *Server) handleSession(s ssh.Session) {
-	ctx := s.Context()
+	var ctx context.Context = s.Context()
 
 	// Pull a logger for the session
 	slog := CtxLogger(ctx)

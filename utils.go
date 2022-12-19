@@ -19,7 +19,7 @@ type multiError struct {
 }
 
 func newMultiError(errors ...error) error {
-	ret := &multiError{}
+	var ret multiError
 
 	for _, err := range errors {
 		if err != nil {
@@ -31,7 +31,7 @@ func newMultiError(errors ...error) error {
 		return nil
 	}
 
-	return ret
+	return &ret
 }
 
 func (ce *multiError) Error() string {

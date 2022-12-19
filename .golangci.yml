@@ -1,23 +1,31 @@
 linters:
   enable-all: true
   disable:
-    - godox
-    - gomnd
-    - unparam
-    - gochecknoglobals
-    - goerr113
+    - exhaustive
     - exhaustivestruct
+    - exhaustruct
+    - gochecknoglobals
+    - godox
+    - goerr113
+    - gomnd
+    - ireturn
     - nestif
-    - wrapcheck
     - nlreturn
     - testpackage
-    - exhaustive
+    - unparam
+    - varnamelen
+    - wrapcheck
 
     # Deprecated linters
+    - deadcode
+    - golint
+    - ifshort
     - interfacer
     - maligned
+    - nosnakecase
     - scopelint
-    - golint
+    - structcheck
+    - varcheck
 
 linters-settings:
   govet:
