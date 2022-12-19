@@ -42,10 +42,10 @@ Clone the repository somewhere, outside the GOPATH. Then, from the root of the
 source tree, run:
 
 ```
-go build
+go build ./cmd/gitdir
 ```
 
-This will create a binary called go-gitdir.
+This will create a binary called `gitdir`.
 
 ## Running
 
