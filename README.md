@@ -1,7 +1,7 @@
 # go-gitdir
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/belak/go-gitdir)](https://goreportcard.com/report/github.com/belak/go-gitdir)
-[![Build Status](https://travis-ci.org/belak/go-gitdir.svg?branch=master)](https://travis-ci.org/belak/go-gitdir)
+[![Build Status](https://github.com/belak/gitdir/actions/workflows/test.yml/badge.svg)](https://github.com/belak/gitdir/actions/workflows/test.yml)
 
 This project makes it incredibly easy to host a secure git server with a config
 that can be easily rolled back.
