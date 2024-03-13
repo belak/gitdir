@@ -22,6 +22,14 @@ func cmdNotFound(ctx context.Context, s ssh.Session, cmd []string) int {
 	return 1
 }
 
+func (serv *Server) cmdGitReceivePack(ctx context.Context, s ssh.Session, cmd []string) int {
+	return serv.cmdRepoAction(ctx, s, cmd, AccessLevelWrite)
+}
+
+func (serv *Server) cmdGitUploadPack(ctx context.Context, s ssh.Session, cmd []string) int {
+	return serv.cmdRepoAction(ctx, s, cmd, AccessLevelRead)
+}
+
 func (serv *Server) cmdRepoAction(ctx context.Context, s ssh.Session, cmd []string, access AccessLevel) int {
 	if len(cmd) != 2 {
 		_ = writeStringFmt(s.Stderr(), "Missing repo name argument\r\n")

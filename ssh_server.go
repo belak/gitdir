@@ -218,9 +218,9 @@ func (serv *Server) handleSession(s ssh.Session) {
 	case "whoami":
 		exit = cmdWhoami(ctx, s, cmd)
 	case "git-receive-pack":
-		exit = serv.cmdRepoAction(ctx, s, cmd, AccessLevelWrite)
+		exit = serv.cmdGitReceivePack(ctx, s, cmd)
 	case "git-upload-pack":
-		exit = serv.cmdRepoAction(ctx, s, cmd, AccessLevelRead)
+		exit = serv.cmdGitUploadPack(ctx, s, cmd)
 	default:
 		exit = cmdNotFound(ctx, s, cmd)
 	}
